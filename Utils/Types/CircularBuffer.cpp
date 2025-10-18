@@ -620,4 +620,94 @@ Fw::SerializeStatus CircularBuffer::setBuffLen(Fw::Serializable::SizeType length
     return Fw::FW_SERIALIZE_OK;
 }
 
+Fw::SerializeStatus CircularBuffer::copyRaw(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size) {
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);
+
+    // Check if there's enough data to copy
+    if (size > this->getSize()) {
+        return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
+    }
+    
+    // Check if destination has enough capacity
+    if (size > dest.getCapacity()) {
+        return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
+    }
+    
+    // Get the current read position (from deserialization index)
+    FwSizeType read_idx = advance_idx(m_head_idx, m_deser_idx);
+    
+    // If data doesn't wrap, we can use setBuff directly
+    FwSizeType bytes_to_end = m_store_size - read_idx;
+    if (size <= bytes_to_end) {
+        // Data is contiguous, use setBuff
+        Fw::SerializeStatus status = dest.setBuff(&m_store[read_idx], size);
+        if (status == Fw::FW_SERIALIZE_OK) {
+            m_deser_idx += size;
+        }
+        return status;
+    }
+    
+    // Data wraps around - need to copy to temporary buffer first
+    U8 temp_buffer[size];
+    FwSizeType temp_offset = 0;
+    FwSizeType remaining = size;
+    
+    while (remaining > 0) {
+        FwSizeType chunkSize = (remaining < (m_store_size - read_idx)) ? 
+                              remaining : (m_store_size - read_idx);
+        
+        (void)memcpy(&temp_buffer[temp_offset], &m_store[read_idx], chunkSize);
+        
+        temp_offset += chunkSize;
+        remaining -= chunkSize;
+        read_idx = advance_idx(read_idx, chunkSize);
+    }
+    
+    // Now use setBuff with the linearized data
+    Fw::SerializeStatus status = dest.setBuff(temp_buffer, size);
+    if (status == Fw::FW_SERIALIZE_OK) {
+        m_deser_idx += size;
+    }
+    
+    return status;
+}
+
+Fw::SerializeStatus CircularBuffer::copyRawOffset(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size) {
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);
+
+    // Check if there's enough data to copy
+    if (size > this->getSize()) {
+        return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
+    }
+    
+    // Check if destination has enough space remaining (capacity check, not serialization space)
+    if (dest.getCapacity() < size + dest.getSize()) {
+        return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
+    }
+    
+    // Get the current read position (from deserialization index)
+    FwSizeType read_idx = advance_idx(m_head_idx, m_deser_idx);
+    
+    // Copy data in chunks that don't wrap around the circular buffer
+    FwSizeType remaining = size;
+    while (remaining > 0) {
+        // Calculate how much we can copy in this chunk
+        FwSizeType chunkSize = (remaining < (m_store_size - read_idx)) ? 
+                              remaining : (m_store_size - read_idx);
+        
+        // Use serializeFrom with OMIT_LENGTH to avoid adding length prefixes
+        Fw::SerializeStatus status = dest.serializeFrom(&m_store[read_idx], chunkSize, Fw::Serialization::OMIT_LENGTH);
+        if (status != Fw::FW_SERIALIZE_OK) {
+            return status;
+        }
+        
+        // Update indices and remaining count
+        remaining -= chunkSize;
+        read_idx = advance_idx(read_idx, chunkSize);
+        m_deser_idx += chunkSize;  // Update deserialization index
+    }
+    
+    return Fw::FW_SERIALIZE_OK;
+}
+
 }  // End Namespace Types

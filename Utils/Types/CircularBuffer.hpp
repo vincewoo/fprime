@@ -188,6 +188,10 @@ class CircularBuffer : public Fw::SerialBufferBase {
     Fw::SerializeStatus deserializeTo(Fw::SerializeBufferBase& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
     Fw::SerializeStatus deserializeSize(FwSizeType& size, Fw::Endianness mode = Fw::Endianness::BIG) override;
 
+    // Copy methods
+    Fw::SerializeStatus copyRaw(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size) override;
+    Fw::SerializeStatus copyRawOffset(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size) override;
+
     // Buffer management methods
     void resetSer() override;
     void resetDeser() override;
@@ -201,6 +205,9 @@ class CircularBuffer : public Fw::SerialBufferBase {
     Fw::Serializable::SizeType getSerializeSizeLeft() const override;
     Fw::SerializeStatus setBuff(const U8* src, Fw::Serializable::SizeType length) override;
     Fw::SerializeStatus setBuffLen(Fw::Serializable::SizeType length) override;
+
+
+
 
   private:
     /**

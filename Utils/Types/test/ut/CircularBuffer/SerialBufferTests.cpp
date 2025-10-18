@@ -618,3 +618,312 @@ TEST_F(SerialBufferInterfaceTest, WrapAroundEndiannessLittle) {
     ASSERT_EQ(buffer.deserializeTo(result, Fw::Endianness::LITTLE), Fw::FW_SERIALIZE_OK);
     ASSERT_EQ(result, test_val);
 }
+
+// Test 33: Basic copyRaw functionality
+TEST_F(SerialBufferInterfaceTest, CopyRawBasic) {
+    // Fill the buffer with test data
+    U8 test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create a destination buffer
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Copy data using copyRaw
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify the data was copied correctly
+    ASSERT_EQ(dest_buffer.getSize(), sizeof(test_data));
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), test_data, sizeof(test_data)), 0);
+    
+    // Verify the deserialization index was updated (copyRaw advances the pointer)
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 0u);
+}
+
+// Test 34: copyRaw resets destination buffer
+TEST_F(SerialBufferInterfaceTest, CopyRawResetsDestination) {
+    // Fill source buffer
+    U8 test_data[] = {0xAA, 0xBB, 0xCC};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create destination buffer with existing data
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    U8 existing_data[] = {0x11, 0x22};
+    ASSERT_EQ(dest_buffer.serializeFrom(existing_data, sizeof(existing_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(dest_buffer.getSize(), 2u);
+    
+    // copyRaw should reset the destination buffer
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify destination only contains the new data (old data was cleared)
+    ASSERT_EQ(dest_buffer.getSize(), sizeof(test_data));
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), test_data, sizeof(test_data)), 0);
+}
+
+// Test 35: copyRaw with wrap-around in circular buffer
+TEST_F(SerialBufferInterfaceTest, CopyRawWrapAround) {
+    // Fill buffer to near capacity, then rotate to create wrap-around scenario
+    U8 filler[TEST_BUFFER_SIZE - 10];
+    memset(filler, 0xAA, sizeof(filler));
+    ASSERT_EQ(buffer.serializeFrom(filler, sizeof(filler), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Rotate to consume most data, leaving space at the end
+    ASSERT_EQ(buffer.rotate(sizeof(filler)), Fw::FW_SERIALIZE_OK);
+    
+    // Now add data that will wrap around
+    U8 test_data[15];
+    for (U32 i = 0; i < sizeof(test_data); i++) {
+        test_data[i] = static_cast<U8>(i);
+    }
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create destination buffer
+    U8 dest_storage[20] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Copy the wrapped data
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify data was copied correctly despite wrap-around
+    ASSERT_EQ(dest_buffer.getSize(), sizeof(test_data));
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), test_data, sizeof(test_data)), 0);
+}
+
+// Test 36: copyRaw with insufficient source data
+TEST_F(SerialBufferInterfaceTest, CopyRawInsufficientSource) {
+    // Add some test data
+    U8 test_data[] = {0x01, 0x02, 0x03};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create a destination buffer
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Try to copy more data than available
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, sizeof(test_data) + 1), Fw::FW_DESERIALIZE_BUFFER_EMPTY);
+    
+    // Verify no data was copied (destination should be empty after reset)
+    ASSERT_EQ(dest_buffer.getSize(), 0u);
+}
+
+// Test 37: copyRaw with insufficient destination space
+TEST_F(SerialBufferInterfaceTest, CopyRawInsufficientDest) {
+    // Add some test data
+    U8 test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create a destination buffer that's too small
+    U8 dest_storage[3] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Try to copy more data than destination can hold
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, sizeof(test_data)), Fw::FW_SERIALIZE_NO_ROOM_LEFT);
+}
+
+// Test 38: copyRaw advances deserialization pointer
+TEST_F(SerialBufferInterfaceTest, CopyRawAdvancesPointer) {
+    // Add multiple chunks of data
+    U8 chunk1[] = {0x01, 0x02, 0x03};
+    U8 chunk2[] = {0x04, 0x05, 0x06, 0x07};
+    ASSERT_EQ(buffer.serializeFrom(chunk1, sizeof(chunk1), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(chunk2, sizeof(chunk2), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Copy first chunk
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, sizeof(chunk1)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), chunk1, sizeof(chunk1)), 0);
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), sizeof(chunk2));
+    
+    // Copy second chunk (pointer should have advanced)
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, sizeof(chunk2)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), chunk2, sizeof(chunk2)), 0);
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 0u);
+}
+
+// Test 39: Basic copyRawOffset functionality
+TEST_F(SerialBufferInterfaceTest, CopyRawOffsetBasic) {
+    // Fill the buffer with test data
+    U8 test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create a destination buffer
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Copy data using copyRawOffset
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, 3), Fw::FW_SERIALIZE_OK);
+    
+    // Verify the data was copied correctly
+    ASSERT_EQ(dest_buffer.getSize(), 3u);
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), test_data, 3), 0);
+    
+    // Verify the deserialization index WAS updated (both methods advance the pointer)
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 2u);
+}
+
+// Test 40: copyRawOffset appends to destination
+TEST_F(SerialBufferInterfaceTest, CopyRawOffsetAppendsToDestination) {
+    // Fill source buffer
+    U8 test_data[] = {0xAA, 0xBB, 0xCC};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create destination buffer with existing data
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    U8 existing_data[] = {0x11, 0x22};
+    ASSERT_EQ(dest_buffer.serializeFrom(existing_data, sizeof(existing_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(dest_buffer.getSize(), 2u);
+    
+    // copyRawOffset should append to the destination buffer (not reset)
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify destination contains both old and new data
+    ASSERT_EQ(dest_buffer.getSize(), 2u + sizeof(test_data));
+    U8 expected[] = {0x11, 0x22, 0xAA, 0xBB, 0xCC};
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), expected, sizeof(expected)), 0);
+}
+
+// Test 41: copyRawOffset with wrap-around
+TEST_F(SerialBufferInterfaceTest, CopyRawOffsetWrapAround) {
+    // Create wrap-around scenario
+    U8 filler[TEST_BUFFER_SIZE - 8];
+    memset(filler, 0xFF, sizeof(filler));
+    ASSERT_EQ(buffer.serializeFrom(filler, sizeof(filler), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.rotate(sizeof(filler)), Fw::FW_SERIALIZE_OK);
+    
+    // Add data that wraps around
+    U8 test_data[12];
+    for (U32 i = 0; i < sizeof(test_data); i++) {
+        test_data[i] = static_cast<U8>(i + 0x10);
+    }
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create destination buffer
+    U8 dest_storage[20] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Copy the wrapped data using copyRawOffset
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify data was copied correctly
+    ASSERT_EQ(dest_buffer.getSize(), sizeof(test_data));
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), test_data, sizeof(test_data)), 0);
+}
+
+// Test 42: copyRawOffset advances deserialization pointer
+TEST_F(SerialBufferInterfaceTest, CopyRawOffsetAdvancesPointer) {
+    // Add data
+    U8 test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // First copyRawOffset
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, 3), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(dest_buffer.getSize(), 3u);
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 4u);
+    
+    // Second copyRawOffset (should continue from where first left off)
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, 2), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(dest_buffer.getSize(), 5u);
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 2u);
+    
+    // Verify the combined data is sequential
+    U8 expected[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), expected, sizeof(expected)), 0);
+}
+
+// Test 43: Mixing copyRaw and copyRawOffset
+TEST_F(SerialBufferInterfaceTest, MixingCopyRawAndCopyRawOffset) {
+    // Add data
+    U8 test_data[] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Use copyRawOffset to append first chunk
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, 2), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(dest_buffer.getSize(), 2u);
+    U8 expected1[] = {0x10, 0x20};
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), expected1, 2), 0);
+    
+    // Use copyRaw which resets destination
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, 3), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(dest_buffer.getSize(), 3u);
+    U8 expected2[] = {0x30, 0x40, 0x50};
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), expected2, 3), 0);
+    
+    // Verify pointer advanced through both operations
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 1u);
+}
+
+// Test 44: copyRawOffset with insufficient destination space
+TEST_F(SerialBufferInterfaceTest, CopyRawOffsetInsufficientDest) {
+    // Add test data
+    U8 test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create a destination buffer that's too small
+    U8 dest_storage[3] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Fill destination partially
+    U8 existing[] = {0xAA};
+    ASSERT_EQ(dest_buffer.serializeFrom(existing, sizeof(existing), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    
+    // Try to copy more data than remaining space (capacity=3, used=1, need=5)
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, sizeof(test_data)), Fw::FW_SERIALIZE_NO_ROOM_LEFT);
+    
+    // Verify deserialization pointer was not advanced on error
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), sizeof(test_data));
+}
+
+// Test 45: copyRaw and copyRawOffset with resetDeser
+TEST_F(SerialBufferInterfaceTest, CopyWithResetDeser) {
+    // Add test data
+    U8 test_data[] = {0xA1, 0xA2, 0xA3, 0xA4};
+    ASSERT_EQ(buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    U8 dest_storage[10] = {0};
+    Fw::ExternalSerializeBuffer dest_buffer(dest_storage, sizeof(dest_storage));
+    
+    // Copy some data
+    ASSERT_EQ(buffer.copyRawOffset(dest_buffer, 2), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 2u);
+    
+    // Reset deserialization pointer
+    buffer.resetDeser();
+    ASSERT_EQ(buffer.getDeserializeSizeLeft(), 4u);
+    
+    // Copy again from the beginning
+    ASSERT_EQ(buffer.copyRaw(dest_buffer, 4), Fw::FW_SERIALIZE_OK);
+    
+    // Verify we copied from the beginning
+    ASSERT_EQ(dest_buffer.getSize(), 4u);
+    ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), test_data, 4), 0);
+}
+
