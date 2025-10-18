@@ -24,6 +24,7 @@ set(UT_SOURCE_FILES
     "${CMAKE_CURRENT_LIST_DIR}/test/ut/CircularBuffer/CircularState.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/test/ut/CircularBuffer/CircularRules.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/test/ut/CircularBuffer/CircularBufferTester.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/test/ut/CircularBuffer/SerialBufferTests.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/test/ut/CircularBuffer/Main.cpp"
 )
 # STest Includes for this UT

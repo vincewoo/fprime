@@ -22,7 +22,7 @@
 
 namespace Types {
 
-class CircularBuffer {
+class CircularBuffer : public Fw::SerialBufferBase {
     friend class CircularBufferTester;
 
   public:
@@ -134,6 +134,74 @@ class CircularBuffer {
      */
     void clear_high_water_mark();
 
+    // ----------------------------------------------------------------------
+    // SerialBufferBase interface implementation
+    // ----------------------------------------------------------------------
+
+    // Serialization methods
+    Fw::SerializeStatus serializeFrom(U8 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(I8 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#if FW_HAS_16_BIT == 1
+    Fw::SerializeStatus serializeFrom(U16 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(I16 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#endif
+#if FW_HAS_32_BIT == 1
+    Fw::SerializeStatus serializeFrom(U32 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(I32 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#endif
+#if FW_HAS_64_BIT == 1
+    Fw::SerializeStatus serializeFrom(U64 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(I64 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#endif
+    Fw::SerializeStatus serializeFrom(F32 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(F64 val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(bool val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(const void* val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(const U8* buff, FwSizeType length, Fw::Endianness endianMode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(const U8* buff, FwSizeType length, Fw::Serialization::t lengthMode, Fw::Endianness endianMode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(const Fw::SerializeBufferBase& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeFrom(const Fw::Serializable& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus serializeSize(const FwSizeType size, Fw::Endianness mode = Fw::Endianness::BIG) override;
+
+    // Deserialization methods
+    Fw::SerializeStatus deserializeTo(U8& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(I8& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#if FW_HAS_16_BIT == 1
+    Fw::SerializeStatus deserializeTo(U16& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(I16& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#endif
+#if FW_HAS_32_BIT == 1
+    Fw::SerializeStatus deserializeTo(U32& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(I32& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#endif
+#if FW_HAS_64_BIT == 1
+    Fw::SerializeStatus deserializeTo(U64& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(I64& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+#endif
+    Fw::SerializeStatus deserializeTo(F32& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(F64& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(bool& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(void*& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(U8* buff, FwSizeType& length, Fw::Endianness endianMode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(U8* buff, FwSizeType& length, Fw::Serialization::t lengthMode, Fw::Endianness endianMode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(Fw::Serializable& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeTo(Fw::SerializeBufferBase& val, Fw::Endianness mode = Fw::Endianness::BIG) override;
+    Fw::SerializeStatus deserializeSize(FwSizeType& size, Fw::Endianness mode = Fw::Endianness::BIG) override;
+
+    // Buffer management methods
+    void resetSer() override;
+    void resetDeser() override;
+    Fw::SerializeStatus moveSerToOffset(FwSizeType offset) override;
+    Fw::SerializeStatus moveDeserToOffset(FwSizeType offset) override;
+    Fw::SerializeStatus serializeSkip(FwSizeType numBytesToSkip) override;
+    Fw::SerializeStatus deserializeSkip(FwSizeType numBytesToSkip) override;
+    Fw::Serializable::SizeType getCapacity() const override;
+    Fw::Serializable::SizeType getSize() const override;
+    Fw::Serializable::SizeType getDeserializeSizeLeft() const override;
+    Fw::Serializable::SizeType getSerializeSizeLeft() const override;
+    Fw::SerializeStatus setBuff(const U8* src, Fw::Serializable::SizeType length) override;
+    Fw::SerializeStatus setBuffLen(Fw::Serializable::SizeType length) override;
+
   private:
     /**
      * Returns a wrap-advanced index into the store.
@@ -153,6 +221,8 @@ class CircularBuffer {
     FwSizeType m_allocated_size;
     //! Maximum allocated size
     FwSizeType m_high_water_mark;
+    //! Deserialization index (offset from head for reading)
+    FwSizeType m_deser_idx;
 };
 }  // End Namespace Types
 #endif
