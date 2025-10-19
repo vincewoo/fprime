@@ -156,52 +156,62 @@ void CircularBuffer ::clear_high_water_mark() {
 // SerialBufferBase interface implementation
 // ----------------------------------------------------------------------
 
-// Helper macro for serializing multi-byte values with endianness support
-#define SERIALIZE_MULTIBYTE(TYPE, VAL, MODE) \
-    do { \
-        if (sizeof(TYPE) > get_free_size()) { \
-            return Fw::FW_SERIALIZE_NO_ROOM_LEFT; \
-        } \
-        U8 bytes[sizeof(TYPE)]; \
-        TYPE temp = (VAL); \
-        if ((MODE) == Fw::Endianness::BIG) { \
-            for (FwSizeType i = 0; i < sizeof(TYPE); i++) { \
-                bytes[sizeof(TYPE) - 1 - i] = static_cast<U8>(temp & 0xFF); \
-                temp >>= 8; \
-            } \
-        } else { \
-            for (FwSizeType i = 0; i < sizeof(TYPE); i++) { \
-                bytes[i] = static_cast<U8>(temp & 0xFF); \
-                temp >>= 8; \
-            } \
-        } \
-        return serialize(bytes, sizeof(TYPE)); \
-    } while(0)
+// Helper function for serializing multi-byte values with endianness support
+template<typename T>
+static inline Fw::SerializeStatus serializeMultibyte(
+    CircularBuffer* buffer,
+    T value,
+    Fw::Endianness mode
+) {
+    if (sizeof(T) > buffer->get_free_size()) {
+        return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
+    }
+    U8 bytes[sizeof(T)];
+    T temp = value;
+    if (mode == Fw::Endianness::BIG) {
+        for (FwSizeType i = 0; i < sizeof(T); i++) {
+            bytes[sizeof(T) - 1 - i] = static_cast<U8>(temp & 0xFF);
+            temp >>= 8;
+        }
+    } else {
+        for (FwSizeType i = 0; i < sizeof(T); i++) {
+            bytes[i] = static_cast<U8>(temp & 0xFF);
+            temp >>= 8;
+        }
+    }
+    return buffer->serialize(bytes, sizeof(T));
+}
 
-// Helper macro for deserializing multi-byte values with endianness support
-#define DESERIALIZE_MULTIBYTE(TYPE, VAL, MODE) \
-    do { \
-        if (sizeof(TYPE) > (m_allocated_size - m_deser_idx)) { \
-            return Fw::FW_DESERIALIZE_BUFFER_EMPTY; \
-        } \
-        U8 bytes[sizeof(TYPE)]; \
-        Fw::SerializeStatus status = peek(bytes, sizeof(TYPE), m_deser_idx); \
-        if (status != Fw::FW_SERIALIZE_OK) { \
-            return status; \
-        } \
-        (VAL) = 0; \
-        if ((MODE) == Fw::Endianness::BIG) { \
-            for (FwSizeType i = 0; i < sizeof(TYPE); i++) { \
-                (VAL) = static_cast<TYPE>(static_cast<TYPE>((VAL) << 8) | static_cast<TYPE>(bytes[i])); \
-            } \
-        } else { \
-            for (FwSizeType i = 0; i < sizeof(TYPE); i++) { \
-                (VAL) = static_cast<TYPE>((VAL) | static_cast<TYPE>(static_cast<TYPE>(bytes[i]) << (i * 8))); \
-            } \
-        } \
-        m_deser_idx += sizeof(TYPE); \
-        return Fw::FW_SERIALIZE_OK; \
-    } while(0)
+// Helper function for deserializing multi-byte values with endianness support
+template<typename T>
+static inline Fw::SerializeStatus deserializeMultibyte(
+    CircularBuffer* buffer,
+    T& value,
+    Fw::Endianness mode,
+    FwSizeType allocatedSize,
+    FwSizeType& deserIdx
+) {
+    if (sizeof(T) > (allocatedSize - deserIdx)) {
+        return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
+    }
+    U8 bytes[sizeof(T)];
+    Fw::SerializeStatus status = buffer->peek(bytes, sizeof(T), deserIdx);
+    if (status != Fw::FW_SERIALIZE_OK) {
+        return status;
+    }
+    value = 0;
+    if (mode == Fw::Endianness::BIG) {
+        for (FwSizeType i = 0; i < sizeof(T); i++) {
+            value = static_cast<T>(static_cast<T>(value << 8) | static_cast<T>(bytes[i]));
+        }
+    } else {
+        for (FwSizeType i = 0; i < sizeof(T); i++) {
+            value = static_cast<T>(value | static_cast<T>(static_cast<T>(bytes[i]) << (i * 8)));
+        }
+    }
+    deserIdx += sizeof(T);
+    return Fw::FW_SERIALIZE_OK;
+}
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(U8 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
@@ -215,7 +225,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I8 val, Fw::Endianness mode) {
 #if FW_HAS_16_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U16 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    SERIALIZE_MULTIBYTE(U16, val, mode);
+    return serializeMultibyte<U16>(this, val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I16 val, Fw::Endianness mode) {
@@ -226,7 +236,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I16 val, Fw::Endianness mode) 
 #if FW_HAS_32_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U32 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    SERIALIZE_MULTIBYTE(U32, val, mode);
+    return serializeMultibyte<U32>(this, val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I32 val, Fw::Endianness mode) {
@@ -237,7 +247,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I32 val, Fw::Endianness mode) 
 #if FW_HAS_64_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U64 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    SERIALIZE_MULTIBYTE(U64, val, mode);
+    return serializeMultibyte<U64>(this, val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I64 val, Fw::Endianness mode) {
@@ -340,7 +350,7 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(I8& val, Fw::Endianness mode) 
 Fw::SerializeStatus CircularBuffer::deserializeTo(U16& val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
-    DESERIALIZE_MULTIBYTE(U16, val, mode);
+    return deserializeMultibyte<U16>(this, val, mode, m_allocated_size, m_deser_idx);
 }
 
 Fw::SerializeStatus CircularBuffer::deserializeTo(I16& val, Fw::Endianness mode) {
@@ -357,7 +367,7 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(I16& val, Fw::Endianness mode)
 Fw::SerializeStatus CircularBuffer::deserializeTo(U32& val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
-    DESERIALIZE_MULTIBYTE(U32, val, mode);
+    return deserializeMultibyte<U32>(this, val, mode, m_allocated_size, m_deser_idx);
 }
 
 Fw::SerializeStatus CircularBuffer::deserializeTo(I32& val, Fw::Endianness mode) {
@@ -374,7 +384,7 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(I32& val, Fw::Endianness mode)
 Fw::SerializeStatus CircularBuffer::deserializeTo(U64& val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
-    DESERIALIZE_MULTIBYTE(U64, val, mode);
+    return deserializeMultibyte<U64>(this, val, mode, m_allocated_size, m_deser_idx);
 }
 
 Fw::SerializeStatus CircularBuffer::deserializeTo(I64& val, Fw::Endianness mode) {
