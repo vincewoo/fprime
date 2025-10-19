@@ -927,3 +927,225 @@ TEST_F(SerialBufferInterfaceTest, CopyWithResetDeser) {
     ASSERT_EQ(memcmp(dest_buffer.getBuffAddr(), test_data, 4), 0);
 }
 
+// Test 46: copyRaw from linear buffer to CircularBuffer - basic
+TEST_F(SerialBufferInterfaceTest, CopyRawFromLinearToCircular) {
+    // Create a linear source buffer with test data
+    U8 source_storage[20];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+    ASSERT_EQ(source_buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    
+    // Reset deserialization to start
+    source_buffer.resetDeser();
+    
+    // Copy from linear buffer to circular buffer using copyRaw
+    ASSERT_EQ(source_buffer.copyRaw(buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify data was copied correctly
+    ASSERT_EQ(buffer.getSize(), sizeof(test_data));
+    
+    // Read back and verify
+    U8 result[5];
+    FwSizeType result_len = sizeof(result);
+    ASSERT_EQ(buffer.deserializeTo(result, result_len, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(memcmp(result, test_data, sizeof(test_data)), 0);
+}
+
+// Test 47: copyRawOffset from linear buffer to CircularBuffer - basic
+TEST_F(SerialBufferInterfaceTest, CopyRawOffsetFromLinearToCircular) {
+    // Create a linear source buffer with test data
+    U8 source_storage[20];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 test_data[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE};
+    ASSERT_EQ(source_buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    
+    // Reset deserialization to start
+    source_buffer.resetDeser();
+    
+    // Copy from linear buffer to circular buffer using copyRawOffset
+    ASSERT_EQ(source_buffer.copyRawOffset(buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify data was copied
+    ASSERT_EQ(buffer.getSize(), sizeof(test_data));
+    
+    // Verify the data matches
+    U8 result[5];
+    FwSizeType result_len = sizeof(result);
+    ASSERT_EQ(buffer.deserializeTo(result, result_len, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(memcmp(result, test_data, sizeof(test_data)), 0);
+}
+
+// Test 48: copyRaw from linear buffer to CircularBuffer with wrap-around
+TEST_F(SerialBufferInterfaceTest, CopyRawFromLinearWithWrapAround) {
+    // Fill circular buffer almost to capacity, then rotate to create wrap-around scenario
+    U8 filler[TEST_BUFFER_SIZE - 15];
+    memset(filler, 0xFF, sizeof(filler));
+    ASSERT_EQ(buffer.serializeFrom(filler, sizeof(filler), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.rotate(sizeof(filler)), Fw::FW_SERIALIZE_OK);
+    
+    // Create linear source buffer with test data
+    U8 source_storage[30];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 test_data[20];
+    for (U32 i = 0; i < sizeof(test_data); i++) {
+        test_data[i] = static_cast<U8>(i + 0x10);
+    }
+    ASSERT_EQ(source_buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    source_buffer.resetDeser();
+    
+    // Copy from linear to circular - this will wrap around in the circular buffer
+    ASSERT_EQ(source_buffer.copyRaw(buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify data was copied correctly despite wrap-around
+    ASSERT_EQ(buffer.getSize(), sizeof(test_data));
+    U8 result[20];
+    FwSizeType result_len = sizeof(result);
+    ASSERT_EQ(buffer.deserializeTo(result, result_len, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(memcmp(result, test_data, sizeof(test_data)), 0);
+}
+
+// Test 49: copyRawOffset appends to CircularBuffer
+TEST_F(SerialBufferInterfaceTest, CopyRawOffsetAppendsToCircular) {
+    // Add some initial data to circular buffer
+    U8 initial_data[] = {0x11, 0x22};
+    ASSERT_EQ(buffer.serializeFrom(initial_data, sizeof(initial_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    
+    // Create linear source buffer
+    U8 source_storage[10];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 test_data[] = {0xAA, 0xBB, 0xCC};
+    ASSERT_EQ(source_buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    source_buffer.resetDeser();
+    
+    // copyRawOffset should append to circular buffer
+    ASSERT_EQ(source_buffer.copyRawOffset(buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify both old and new data present
+    ASSERT_EQ(buffer.getSize(), sizeof(initial_data) + sizeof(test_data));
+    U8 result[5];
+    FwSizeType result_len = sizeof(result);
+    ASSERT_EQ(buffer.deserializeTo(result, result_len, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    U8 expected[] = {0x11, 0x22, 0xAA, 0xBB, 0xCC};
+    ASSERT_EQ(memcmp(result, expected, sizeof(expected)), 0);
+}
+
+// Test 50: copyRaw resets CircularBuffer
+TEST_F(SerialBufferInterfaceTest, CopyRawResetsCircular) {
+    // Add some initial data to circular buffer
+    U8 initial_data[] = {0x11, 0x22};
+    ASSERT_EQ(buffer.serializeFrom(initial_data, sizeof(initial_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), 2u);
+    
+    // Create linear source buffer
+    U8 source_storage[10];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 test_data[] = {0xAA, 0xBB, 0xCC};
+    ASSERT_EQ(source_buffer.serializeFrom(test_data, sizeof(test_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    source_buffer.resetDeser();
+    
+    // copyRaw should reset circular buffer (discard old data)
+    ASSERT_EQ(source_buffer.copyRaw(buffer, sizeof(test_data)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify only new data present
+    ASSERT_EQ(buffer.getSize(), sizeof(test_data));
+    U8 result[3];
+    FwSizeType result_len = sizeof(result);
+    ASSERT_EQ(buffer.deserializeTo(result, result_len, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(memcmp(result, test_data, sizeof(test_data)), 0);
+}
+
+// Test 51: Multiple copyRawOffset calls from linear to circular
+TEST_F(SerialBufferInterfaceTest, MultipleCopyRawOffsetFromLinear) {
+    // Create linear source buffer with multiple chunks
+    U8 source_storage[20];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 chunk1[] = {0x01, 0x02, 0x03};
+    U8 chunk2[] = {0x04, 0x05};
+    U8 chunk3[] = {0x06, 0x07, 0x08, 0x09};
+    ASSERT_EQ(source_buffer.serializeFrom(chunk1, sizeof(chunk1), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(source_buffer.serializeFrom(chunk2, sizeof(chunk2), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(source_buffer.serializeFrom(chunk3, sizeof(chunk3), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    source_buffer.resetDeser();
+    
+    // Copy chunks one at a time using copyRawOffset
+    ASSERT_EQ(source_buffer.copyRawOffset(buffer, sizeof(chunk1)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), sizeof(chunk1));
+    
+    ASSERT_EQ(source_buffer.copyRawOffset(buffer, sizeof(chunk2)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), sizeof(chunk1) + sizeof(chunk2));
+    
+    ASSERT_EQ(source_buffer.copyRawOffset(buffer, sizeof(chunk3)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), sizeof(chunk1) + sizeof(chunk2) + sizeof(chunk3));
+    
+    // Verify all data copied sequentially
+    U8 result[9];
+    FwSizeType result_len = sizeof(result);
+    ASSERT_EQ(buffer.deserializeTo(result, result_len, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    U8 expected[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09};
+    ASSERT_EQ(memcmp(result, expected, sizeof(expected)), 0);
+}
+
+// Test 52: copyRaw from linear to circular - insufficient destination space
+TEST_F(SerialBufferInterfaceTest, CopyRawFromLinearInsufficientSpace) {
+    // Create linear source with large data
+    U8 source_storage[TEST_BUFFER_SIZE + 100];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 large_data[TEST_BUFFER_SIZE + 50];
+    memset(large_data, 0xAA, sizeof(large_data));
+    ASSERT_EQ(source_buffer.serializeFrom(large_data, sizeof(large_data), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    source_buffer.resetDeser();
+    
+    // Try to copy more than circular buffer capacity
+    ASSERT_EQ(source_buffer.copyRaw(buffer, sizeof(large_data)), Fw::FW_SERIALIZE_NO_ROOM_LEFT);
+    
+    // Verify circular buffer is empty (no partial copy)
+    ASSERT_EQ(buffer.getSize(), 0u);
+}
+
+// Test 53: copyRaw advances source deserialization pointer
+TEST_F(SerialBufferInterfaceTest, CopyRawAdvancesSourcePointer) {
+    // Create linear source with multiple values
+    U8 source_storage[20];
+    Fw::ExternalSerializeBuffer source_buffer(source_storage, sizeof(source_storage));
+    U8 data1[] = {0x01, 0x02, 0x03};
+    U8 data2[] = {0x04, 0x05, 0x06, 0x07};
+    ASSERT_EQ(source_buffer.serializeFrom(data1, sizeof(data1), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(source_buffer.serializeFrom(data2, sizeof(data2), Fw::Serialization::OMIT_LENGTH),
+              Fw::FW_SERIALIZE_OK);
+    source_buffer.resetDeser();
+    
+    // Copy first chunk
+    ASSERT_EQ(source_buffer.copyRaw(buffer, sizeof(data1)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(source_buffer.getDeserializeSizeLeft(), sizeof(data2));
+    
+    // Copy second chunk (source pointer should have advanced)
+    ASSERT_EQ(source_buffer.copyRaw(buffer, sizeof(data2)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(source_buffer.getDeserializeSizeLeft(), 0u);
+    
+    // Verify second chunk was copied (buffer was reset by second copyRaw)
+    U8 result[4];
+    FwSizeType result_len = sizeof(result);
+    ASSERT_EQ(buffer.deserializeTo(result, result_len, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(memcmp(result, data2, sizeof(data2)), 0);
+}
+
