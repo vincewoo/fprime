@@ -1149,3 +1149,252 @@ TEST_F(SerialBufferInterfaceTest, CopyRawAdvancesSourcePointer) {
     ASSERT_EQ(memcmp(result, data2, sizeof(data2)), 0);
 }
 
+// Test 54: Boolean deserialization format error
+TEST_F(SerialBufferInterfaceTest, BooleanDeserializeFormatError) {
+    // Manually write an invalid boolean value (not 0xFF or 0x00)
+    U8 invalid_bool = 0x42;
+    ASSERT_EQ(buffer.serializeFrom(&invalid_bool, 1, Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    bool result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_DESERIALIZE_FORMAT_ERROR);
+}
+
+// Test 55: moveSerToOffset basic functionality
+TEST_F(SerialBufferInterfaceTest, MoveSerToOffset) {
+    // Serialize some data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0x11111111)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), sizeof(U32));
+    
+    // Move serialization pointer back to beginning
+    ASSERT_EQ(buffer.moveSerToOffset(0), Fw::FW_SERIALIZE_OK);
+    
+    // Overwrite with new data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0x22222222)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), sizeof(U32));
+    
+    // Verify the overwrite (should read new value)
+    U32 result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x22222222);
+}
+
+// Test 56: moveSerToOffset beyond capacity
+TEST_F(SerialBufferInterfaceTest, MoveSerToOffsetBeyondCapacity) {
+    // Try to move beyond capacity
+    ASSERT_EQ(buffer.moveSerToOffset(TEST_BUFFER_SIZE + 1), 
+              Fw::FW_SERIALIZE_NO_ROOM_LEFT);
+}
+
+// Test 57: moveSerToOffset to middle of buffer
+TEST_F(SerialBufferInterfaceTest, MoveSerToOffsetMiddle) {
+    // Fill buffer with some data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xAAAAAAAA)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xBBBBBBBB)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xCCCCCCCC)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), 3 * sizeof(U32));
+    
+    // Move serialization pointer to middle (after first U32)
+    ASSERT_EQ(buffer.moveSerToOffset(sizeof(U32)), Fw::FW_SERIALIZE_OK);
+    
+    // Write new data at that position (overwrites second value)
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xDDDDDDDD)), Fw::FW_SERIALIZE_OK);
+    // Size remains 3*sizeof(U32) because we wrote within existing allocated space
+    ASSERT_EQ(buffer.getSize(), 3 * sizeof(U32));
+    
+    // Verify: first value unchanged, second value is new, third value unchanged
+    U32 result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0xAAAAAAAA);
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0xDDDDDDDD);
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0xCCCCCCCC);
+}
+
+// Test 58: Serializable object with wrap-around
+TEST_F(SerialBufferInterfaceTest, SerializeSerializableWrapAround) {
+    // Position buffer to create wrap-around scenario
+    U8 filler[TEST_BUFFER_SIZE - 20];
+    memset(filler, 0xAA, sizeof(filler));
+    ASSERT_EQ(buffer.serializeFrom(filler, sizeof(filler), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Rotate to consume the filler
+    ASSERT_EQ(buffer.rotate(sizeof(filler)), Fw::FW_SERIALIZE_OK);
+    
+    // Create a Serializable object (using ExternalSerializeBuffer as a Serializable)
+    U8 serializable_storage[30];
+    Fw::ExternalSerializeBuffer serializable(serializable_storage, sizeof(serializable_storage));
+    ASSERT_EQ(serializable.serializeFrom(static_cast<U32>(0x12345678)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(serializable.serializeFrom(static_cast<U16>(0xABCD)), Fw::FW_SERIALIZE_OK);
+    
+    // Serialize the Serializable object - this will wrap around
+    ASSERT_EQ(buffer.serializeFrom(serializable), Fw::FW_SERIALIZE_OK);
+    
+    // Deserialize and verify
+    Fw::ExternalSerializeBuffer result_buffer(serializable_storage, sizeof(serializable_storage));
+    ASSERT_EQ(buffer.deserializeTo(result_buffer), Fw::FW_SERIALIZE_OK);
+    
+    U32 u32_result;
+    U16 u16_result;
+    ASSERT_EQ(result_buffer.deserializeTo(u32_result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(u32_result, 0x12345678);
+    ASSERT_EQ(result_buffer.deserializeTo(u16_result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(u16_result, 0xABCD);
+}
+
+// Test 59: Deserialize Serializable object with wrap-around
+TEST_F(SerialBufferInterfaceTest, DeserializeSerializableWrapAround) {
+    // Position buffer to create wrap-around scenario
+    U8 filler[TEST_BUFFER_SIZE - 25];
+    memset(filler, 0xBB, sizeof(filler));
+    ASSERT_EQ(buffer.serializeFrom(filler, sizeof(filler), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Rotate to consume the filler
+    ASSERT_EQ(buffer.rotate(sizeof(filler)), Fw::FW_SERIALIZE_OK);
+    
+    // Create a Serializable object and serialize it (which will wrap)
+    U8 serializable_storage[20];
+    Fw::ExternalSerializeBuffer serializable(serializable_storage, sizeof(serializable_storage));
+    ASSERT_EQ(serializable.serializeFrom(static_cast<U32>(0xDEADBEEF)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(serializable.serializeFrom(static_cast<U16>(0xCAFE)), Fw::FW_SERIALIZE_OK);
+    
+    // Serialize the Serializable into the circular buffer
+    ASSERT_EQ(buffer.serializeFrom(serializable), Fw::FW_SERIALIZE_OK);
+    
+    // Deserialize into a new Serializable object
+    U8 result_storage[20];
+    Fw::ExternalSerializeBuffer result_buffer(result_storage, sizeof(result_storage));
+    ASSERT_EQ(buffer.deserializeTo(result_buffer), Fw::FW_SERIALIZE_OK);
+    
+    // Verify the deserialized data
+    U32 u32_result;
+    U16 u16_result;
+    ASSERT_EQ(result_buffer.deserializeTo(u32_result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(u32_result, 0xDEADBEEF);
+    ASSERT_EQ(result_buffer.deserializeTo(u16_result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(u16_result, 0xCAFE);
+}
+
+// Test 60: Rotate with serialization index - basic append behavior
+TEST_F(SerialBufferInterfaceTest, RotateWithSerializationIndex) {
+    // Serialize data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xAAAAAAAA)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xBBBBBBBB)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), 2 * sizeof(U32));
+    
+    // Rotate away first value
+    ASSERT_EQ(buffer.rotate(sizeof(U32)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), sizeof(U32));
+    
+    // Serialize more data (should append after remaining data)
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xCCCCCCCC)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.getSize(), 2 * sizeof(U32));
+    
+    // Verify all data in correct order
+    U32 result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0xBBBBBBBB);
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0xCCCCCCCC);
+}
+
+// Test 61: Multiple rotations with interleaved serialization
+TEST_F(SerialBufferInterfaceTest, MultipleRotationsWithSerialization) {
+    // Initial data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U16>(0x1111)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U16>(0x2222)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U16>(0x3333)), Fw::FW_SERIALIZE_OK);
+    
+    // Rotate away first value
+    ASSERT_EQ(buffer.rotate(sizeof(U16)), Fw::FW_SERIALIZE_OK);
+    
+    // Add more data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U16>(0x4444)), Fw::FW_SERIALIZE_OK);
+    
+    // Rotate away another value
+    ASSERT_EQ(buffer.rotate(sizeof(U16)), Fw::FW_SERIALIZE_OK);
+    
+    // Add more data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U16>(0x5555)), Fw::FW_SERIALIZE_OK);
+    
+    // Should have: 0x3333, 0x4444, 0x5555
+    U16 result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x3333);
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x4444);
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x5555);
+}
+
+// Test 62: Rotate with deserialization in progress
+TEST_F(SerialBufferInterfaceTest, RotateWithDeserializationInProgress) {
+    // Serialize multiple values
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0x11111111)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0x22222222)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0x33333333)), Fw::FW_SERIALIZE_OK);
+    
+    // Deserialize first value
+    U32 result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x11111111);
+    
+    // Now rotate away the first value (which we already deserialized)
+    ASSERT_EQ(buffer.rotate(sizeof(U32)), Fw::FW_SERIALIZE_OK);
+    
+    // Deserialization index should be adjusted - we should still be able to read remaining values
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x22222222);
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x33333333);
+}
+
+// Test 63: Rotate more than deserialization index
+TEST_F(SerialBufferInterfaceTest, RotateBeyondDeserializationIndex) {
+    // Serialize multiple values
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xAAAAAAAA)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xBBBBBBBB)), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0xCCCCCCCC)), Fw::FW_SERIALIZE_OK);
+    
+    // Deserialize first value
+    U32 result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0xAAAAAAAA);
+    
+    // Rotate away first TWO values (more than we've deserialized)
+    ASSERT_EQ(buffer.rotate(2 * sizeof(U32)), Fw::FW_SERIALIZE_OK);
+    
+    // Deserialization index should be reset to 0 (since we rotated past it)
+    // We should now read the third value
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0xCCCCCCCC);
+}
+
+// Test 64: Serialize after moveSerToOffset with wrap-around
+TEST_F(SerialBufferInterfaceTest, MoveSerToOffsetWithWrapAround) {
+    // Fill buffer almost to capacity
+    U8 filler[TEST_BUFFER_SIZE - 10];
+    memset(filler, 0xDD, sizeof(filler));
+    ASSERT_EQ(buffer.serializeFrom(filler, sizeof(filler), Fw::Serialization::OMIT_LENGTH), 
+              Fw::FW_SERIALIZE_OK);
+    
+    // Rotate to create wrap-around scenario
+    ASSERT_EQ(buffer.rotate(sizeof(filler)), Fw::FW_SERIALIZE_OK);
+    
+    // Add some data
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0x11111111)), Fw::FW_SERIALIZE_OK);
+    
+    // Move serialization pointer back to beginning (offset 0)
+    ASSERT_EQ(buffer.moveSerToOffset(0), Fw::FW_SERIALIZE_OK);
+    
+    // Serialize new data (should overwrite)
+    ASSERT_EQ(buffer.serializeFrom(static_cast<U32>(0x22222222)), Fw::FW_SERIALIZE_OK);
+    
+    // Verify we read the new value
+    U32 result;
+    ASSERT_EQ(buffer.deserializeTo(result), Fw::FW_SERIALIZE_OK);
+    ASSERT_EQ(result, 0x22222222);
+}
