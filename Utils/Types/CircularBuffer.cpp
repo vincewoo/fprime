@@ -42,12 +42,16 @@ void CircularBuffer ::setup(U8* const buffer, const FwSizeType size) {
     m_ser_idx = 0;
 }
 
-FwSizeType CircularBuffer ::advance_idx(FwSizeType idx, FwSizeType amount) const {
+inline FwSizeType CircularBuffer ::advance_idx(FwSizeType idx, FwSizeType amount) const {
     FW_ASSERT(idx < m_store_size, static_cast<FwAssertArgType>(idx));
-    return (idx + amount) % m_store_size;
+    FwSizeType new_idx = idx + amount;
+    while (new_idx >= m_store_size) {
+        new_idx -= m_store_size;
+    }
+    return new_idx;
 }
 
-Fw::SerializeStatus CircularBuffer ::checkSerializeSpace(const FwSizeType size) const {
+inline Fw::SerializeStatus CircularBuffer ::checkSerializeSpace(const FwSizeType size) const {
     // Calculate how much new space we need beyond current allocated size
     FwSizeType end_offset = m_ser_idx + size;
     FwSizeType new_space_needed = (end_offset > m_allocated_size) ? (end_offset - m_allocated_size) : 0;
@@ -67,18 +71,30 @@ Fw::SerializeStatus CircularBuffer ::serializeRaw(const U8* const buffer, const 
     }
     // Copy in all the supplied data (no endianness conversion)
     FwSizeType idx = advance_idx(m_head_idx, m_ser_idx);
-    for (U32 i = 0; i < size; i++) {
-        FW_ASSERT(idx < m_store_size, static_cast<FwAssertArgType>(idx));
-        m_store[idx] = buffer[i];
-        idx = advance_idx(idx);
+    FwSizeType bytes_to_end = m_store_size - idx;
+    
+    if (size <= bytes_to_end) {
+        // Data fits without wrapping - single memcpy
+        FW_ASSERT(idx + size <= m_store_size, static_cast<FwAssertArgType>(idx + size));
+        (void)memcpy(&m_store[idx], buffer, size);
+    } else {
+        // Data wraps around - two memcpy operations
+        FW_ASSERT(idx + bytes_to_end <= m_store_size, static_cast<FwAssertArgType>(idx + bytes_to_end));
+        (void)memcpy(&m_store[idx], buffer, bytes_to_end);
+        FwSizeType remaining = size - bytes_to_end;
+        FW_ASSERT(remaining <= m_store_size, static_cast<FwAssertArgType>(remaining));
+        (void)memcpy(&m_store[0], &buffer[bytes_to_end], remaining);
     }
+    
     m_ser_idx += size;
     // Update allocated size if we've written beyond the current end
     if (m_ser_idx > m_allocated_size) {
         m_allocated_size = m_ser_idx;
+        if (m_allocated_size > m_high_water_mark) {
+            m_high_water_mark = m_allocated_size;
+        }
     }
     FW_ASSERT(m_allocated_size <= this->getCapacity(), static_cast<FwAssertArgType>(m_allocated_size));
-    m_high_water_mark = (m_high_water_mark > m_allocated_size) ? m_high_water_mark : m_allocated_size;
     return Fw::FW_SERIALIZE_OK;
 }
 
@@ -125,12 +141,21 @@ Fw::SerializeStatus CircularBuffer ::peek(U8* buffer, FwSizeType size, FwSizeTyp
         return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
     }
     FwSizeType idx = advance_idx(m_head_idx, offset);
-    // Deserialize all the bytes from network format
-    for (FwSizeType i = 0; i < size; i++) {
-        FW_ASSERT(idx < m_store_size, static_cast<FwAssertArgType>(idx));
-        buffer[i] = m_store[idx];
-        idx = advance_idx(idx);
+    FwSizeType bytes_to_end = m_store_size - idx;
+    
+    if (size <= bytes_to_end) {
+        // Data is contiguous - single memcpy
+        FW_ASSERT(idx + size <= m_store_size, static_cast<FwAssertArgType>(idx + size));
+        (void)memcpy(buffer, &m_store[idx], size);
+    } else {
+        // Data wraps around - two memcpy operations
+        FW_ASSERT(idx + bytes_to_end <= m_store_size, static_cast<FwAssertArgType>(idx + bytes_to_end));
+        (void)memcpy(buffer, &m_store[idx], bytes_to_end);
+        FwSizeType remaining = size - bytes_to_end;
+        FW_ASSERT(remaining <= m_store_size, static_cast<FwAssertArgType>(remaining));
+        (void)memcpy(&buffer[bytes_to_end], &m_store[0], remaining);
     }
+    
     return Fw::FW_SERIALIZE_OK;
 }
 
@@ -174,37 +199,23 @@ Fw::SerializeStatus CircularBuffer::serializeMultibyteValue(T value, Fw::Endiann
         return status;
     }
     
-    FwSizeType idx = this->advance_idx(this->m_head_idx, this->m_ser_idx);
+    U8 bytes[sizeof(T)];
     
     if (mode == Fw::Endianness::BIG) {
-        // For big-endian, write most significant byte first
+        // Big-endian: MSB first
         for (FwSizeType i = 0; i < sizeof(T); i++) {
-            FW_ASSERT(idx < this->m_store_size, static_cast<FwAssertArgType>(idx));
-            // Extract byte from MSB to LSB and write sequentially
-            this->m_store[idx] = static_cast<U8>((value >> ((sizeof(T) - 1 - i) * 8)) & 0xFF);
-            idx = this->advance_idx(idx);
+            bytes[i] = static_cast<U8>((value >> ((sizeof(T) - 1 - i) * 8)) & 0xFF);
         }
     } else {
-        // For little-endian, write least significant byte first
+        // Little-endian: LSB first
         T temp = value;
         for (FwSizeType i = 0; i < sizeof(T); i++) {
-            FW_ASSERT(idx < this->m_store_size, static_cast<FwAssertArgType>(idx));
-            this->m_store[idx] = static_cast<U8>(temp & 0xFF);
+            bytes[i] = static_cast<U8>(temp & 0xFF);
             temp >>= 8;
-            idx = this->advance_idx(idx);
         }
     }
     
-    this->m_ser_idx += sizeof(T);
-    // Update allocated size if we've written beyond the current end
-    if (this->m_ser_idx > this->m_allocated_size) {
-        this->m_allocated_size = this->m_ser_idx;
-    }
-    FW_ASSERT(this->m_allocated_size <= this->getCapacity(), static_cast<FwAssertArgType>(this->m_allocated_size));
-    this->m_high_water_mark = (this->m_high_water_mark > this->m_allocated_size) ? 
-                               this->m_high_water_mark : this->m_allocated_size;
-    
-    return Fw::FW_SERIALIZE_OK;
+    return this->serializeRaw(bytes, sizeof(T));
 }
 
 // Helper function for deserializing multi-byte values with endianness support
@@ -226,12 +237,14 @@ static inline Fw::SerializeStatus deserializeMultibyte(
     }
     value = 0;
     if (mode == Fw::Endianness::BIG) {
+        // Big-endian: MSB first
         for (FwSizeType i = 0; i < sizeof(T); i++) {
-            value = static_cast<T>(static_cast<T>(value << 8) | static_cast<T>(bytes[i]));
+            value = static_cast<T>((value << 8) | static_cast<T>(bytes[i]));
         }
     } else {
+        // Little-endian: LSB first
         for (FwSizeType i = 0; i < sizeof(T); i++) {
-            value = static_cast<T>(value | static_cast<T>(static_cast<T>(bytes[i]) << (i * 8)));
+            value = static_cast<T>(value | (static_cast<T>(bytes[i]) << (i * 8)));
         }
     }
     deserIdx += sizeof(T);
@@ -335,9 +348,13 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(const Fw::LinearBufferBase& va
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(const Fw::Serializable& val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    // Create a temporary external buffer wrapping our circular buffer's tail
-    // This is a workaround since we can't directly serialize into circular buffer
-    // We'll need to use a temporary linear buffer
+    // NOTE: This implementation uses a temporary buffer on the stack because the Serializable
+    // interface requires a contiguous SerialBufferBase for serialization, which cannot be
+    // directly provided by a circular buffer that may wrap. This is a known limitation.
+    // For embedded systems with tight stack constraints, consider:
+    // 1. Using serializeFrom(U8*, FwSizeType) for pre-serialized data when possible
+    // 2. Ensuring Serializable objects are small enough to fit in FW_COM_BUFFER_MAX_SIZE
+    // 3. Implementing a custom serialization path that avoids the temporary buffer
     U8 tempBuf[FW_COM_BUFFER_MAX_SIZE];  // Standard F' communication buffer size
     Fw::ExternalSerializeBuffer tempBuffer(tempBuf, sizeof(tempBuf));
     
@@ -512,7 +529,7 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(Fw::Serializable& val, Fw::End
         return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
     }
     
-    U8 tempBuf[512];
+    U8 tempBuf[FW_COM_BUFFER_MAX_SIZE];
     FwSizeType copySize = (remaining < sizeof(tempBuf)) ? remaining : sizeof(tempBuf);
     
     Fw::SerializeStatus status = peek(tempBuf, copySize, m_deser_idx);

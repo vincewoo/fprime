@@ -692,11 +692,12 @@ class CircularBuffer : public Fw::SerialBufferBase {
   private:
     /**
      * Returns a wrap-advanced index into the store.
+     * Inline hint for performance - called frequently in hot paths.
      * \param idx: index to advance and wrap.
      * \param amount: amount to advance
      * \return: new index value
      */
-    FwSizeType advance_idx(FwSizeType idx, FwSizeType amount = 1) const;
+    inline FwSizeType advance_idx(FwSizeType idx, FwSizeType amount = 1) const;
     
     /**
      * Helper function for serializing multi-byte values with endianness support.
@@ -720,11 +721,11 @@ class CircularBuffer : public Fw::SerialBufferBase {
     /**
      * Helper function to check if there is sufficient space for serialization.
      * Validates that writing 'size' bytes at the current serialization index
-     * will not exceed the buffer capacity.
+     * will not exceed the buffer capacity. Inline hint for performance.
      * \param size: number of bytes to check space for
      * \return: serialization status (FW_SERIALIZE_OK or FW_SERIALIZE_NO_ROOM_LEFT)
      */
-    Fw::SerializeStatus checkSerializeSpace(const FwSizeType size) const;
+    inline Fw::SerializeStatus checkSerializeSpace(const FwSizeType size) const;
     
     //! Physical store backing this circular buffer
     U8* m_store;
