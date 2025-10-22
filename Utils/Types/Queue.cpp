@@ -55,7 +55,7 @@ void Queue::clear_high_water_mark() {
 
 FwSizeType Queue::getQueueSize() const {
     FW_ASSERT(m_message_size > 0, static_cast<FwAssertArgType>(m_message_size));
-    return m_internal.get_allocated_size() / m_message_size;
+    return m_internal.getSize() / m_message_size;
 }
 
 }  // namespace Types

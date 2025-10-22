@@ -41,14 +41,14 @@ void CircularBuffer ::setup(U8* const buffer, const FwSizeType size) {
     m_deser_idx = 0;
 }
 
+// DEPRECATED: Calling getSize() is preferred
 FwSizeType CircularBuffer ::get_allocated_size() const {
-    return m_allocated_size;
+    return getSize();
 }
 
+// DEPRECATED: Calling getSerializeSizeLeft() is preferred
 FwSizeType CircularBuffer ::get_free_size() const {
-    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    FW_ASSERT(m_allocated_size <= m_store_size, static_cast<FwAssertArgType>(m_allocated_size));
-    return m_store_size - m_allocated_size;
+    return getSerializeSizeLeft();
 }
 
 FwSizeType CircularBuffer ::advance_idx(FwSizeType idx, FwSizeType amount) const {
@@ -60,7 +60,7 @@ Fw::SerializeStatus CircularBuffer ::serialize(const U8* const buffer, const FwS
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(buffer != nullptr);
     // Check there is sufficient space
-    if (size > get_free_size()) {
+    if (size > getSerializeSizeLeft()) {
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
     }
     // Copy in all the supplied data
@@ -71,7 +71,7 @@ Fw::SerializeStatus CircularBuffer ::serialize(const U8* const buffer, const FwS
         idx = advance_idx(idx);
     }
     m_allocated_size += size;
-    FW_ASSERT(m_allocated_size <= this->get_capacity(), static_cast<FwAssertArgType>(m_allocated_size));
+    FW_ASSERT(m_allocated_size <= this->getCapacity(), static_cast<FwAssertArgType>(m_allocated_size));
     m_high_water_mark = (m_high_water_mark > m_allocated_size) ? m_high_water_mark : m_allocated_size;
     return Fw::FW_SERIALIZE_OK;
 }
@@ -139,9 +139,9 @@ Fw::SerializeStatus CircularBuffer ::rotate(FwSizeType amount) {
     return Fw::FW_SERIALIZE_OK;
 }
 
+// DEPRECATED: Calling getCapacity() is preferred
 FwSizeType CircularBuffer ::get_capacity() const {
-    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return m_store_size;
+    return getCapacity();
 }
 
 FwSizeType CircularBuffer ::get_high_water_mark() const {
@@ -163,7 +163,7 @@ static inline Fw::SerializeStatus serializeMultibyte(
     T value,
     Fw::Endianness mode
 ) {
-    if (sizeof(T) > buffer->get_free_size()) {
+    if (sizeof(T) > buffer->getSerializeSizeLeft()) {
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
     }
     U8 bytes[sizeof(T)];
@@ -577,7 +577,7 @@ Fw::SerializeStatus CircularBuffer::serializeSkip(FwSizeType numBytesToSkip) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     // For circular buffer, skipping during serialization doesn't make sense
     // since we always append to the end
-    if (numBytesToSkip > get_free_size()) {
+    if (numBytesToSkip > getSerializeSizeLeft()) {
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
     }
     // Allocate space by advancing allocated size
@@ -596,7 +596,8 @@ Fw::SerializeStatus CircularBuffer::deserializeSkip(FwSizeType numBytesToSkip) {
 }
 
 Fw::Serializable::SizeType CircularBuffer::getCapacity() const {
-    return get_capacity();
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
+    return m_store_size;
 }
 
 Fw::Serializable::SizeType CircularBuffer::getSize() const {
@@ -609,7 +610,9 @@ Fw::Serializable::SizeType CircularBuffer::getDeserializeSizeLeft() const {
 }
 
 Fw::Serializable::SizeType CircularBuffer::getSerializeSizeLeft() const {
-    return get_free_size();
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
+    FW_ASSERT(m_allocated_size <= m_store_size, static_cast<FwAssertArgType>(m_allocated_size));
+    return m_store_size - m_allocated_size;
 }
 
 Fw::SerializeStatus CircularBuffer::setBuff(const U8* src, Fw::Serializable::SizeType length) {

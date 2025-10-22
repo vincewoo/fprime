@@ -116,7 +116,7 @@ Types::CircularBuffer& CircularState::getTestBuffer() {
 
 void CircularState::checkSizes() const {
     const FwSizeType allocated_size = (MAX_BUFFER_SIZE - m_remaining_size);
-    ASSERT_EQ(m_test_buffer.get_free_size(), m_remaining_size);
-    ASSERT_EQ(m_test_buffer.get_allocated_size(), allocated_size);
+    ASSERT_EQ(m_test_buffer.getSerializeSizeLeft(), m_remaining_size);
+    ASSERT_EQ(m_test_buffer.getSize(), allocated_size);
 }
 }  // namespace MockTypes

@@ -109,20 +109,20 @@ class CircularBuffer : public Fw::SerialBufferBase {
      * Get the number of bytes allocated in the buffer
      * \return number of bytes
      */
-    FwSizeType get_allocated_size() const;
+    DEPRECATED(FwSizeType get_allocated_size() const, "Use getSize() instead");
 
     /**
      * Get the number of free bytes, i.e., the number
      * of bytes that may be stored in the buffer without
      * deleting data and without exceeding the buffer capacity
      */
-    FwSizeType get_free_size() const;
+    DEPRECATED(FwSizeType get_free_size() const, "Use getSerializeSizeLeft() instead");
 
     /**
      * Get the logical capacity of the buffer, i.e., the number of available
      * bytes when the buffer is empty
      */
-    FwSizeType get_capacity() const;
+    DEPRECATED(FwSizeType get_capacity() const, "Use getCapacity() instead");
 
     /**
      * Return the largest tracked allocated size

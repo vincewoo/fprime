@@ -17,7 +17,7 @@ namespace Svc {
 namespace FrameDetectors {
 
 FrameDetector::Status CcsdsTcFrameDetector::detect(const Types::CircularBuffer& data, FwSizeType& size_out) const {
-    if (data.get_allocated_size() < Ccsds::TCHeader::SERIALIZED_SIZE + Ccsds::TCTrailer::SERIALIZED_SIZE) {
+    if (data.getSize() < Ccsds::TCHeader::SERIALIZED_SIZE + Ccsds::TCTrailer::SERIALIZED_SIZE) {
         size_out = Ccsds::TCHeader::SERIALIZED_SIZE + Ccsds::TCTrailer::SERIALIZED_SIZE;
         return Status::MORE_DATA_NEEDED;
     }
@@ -46,7 +46,7 @@ FrameDetector::Status CcsdsTcFrameDetector::detect(const Types::CircularBuffer& 
         static_cast<FwSizeType>((header.get_vcIdAndLength() & Ccsds::TCSubfields::FrameLengthMask) + 1);
     const U16 data_to_crc_length = static_cast<U16>(expected_frame_length - Ccsds::TCTrailer::SERIALIZED_SIZE);
 
-    if (data.get_allocated_size() < expected_frame_length) {
+    if (data.getSize() < expected_frame_length) {
         size_out = expected_frame_length;
         return Status::MORE_DATA_NEEDED;
     }

@@ -43,7 +43,7 @@ void FrameAccumulatorTester ::testFrameDetected() {
     // Checks
     ASSERT_from_dataReturnOut_SIZE(1);                                            // input buffer ownership was returned
     ASSERT_from_dataOut_SIZE(1);                                                  // frame was sent
-    ASSERT_EQ(this->component.m_inRing.get_allocated_size(), 0);                  // no data left in ring buffer
+    ASSERT_EQ(this->component.m_inRing.getSize(), 0);                  // no data left in ring buffer
     ASSERT_EQ(this->fromPortHistory_dataOut->at(0).data.getSize(), buffer_size);  // all data was sent out
 }
 
@@ -60,7 +60,7 @@ void FrameAccumulatorTester ::testMoreDataNeeded() {
     // Checks
     ASSERT_from_dataReturnOut_SIZE(1);                                      // input buffer ownership was returned
     ASSERT_from_dataOut_SIZE(0);                                            // frame was not sent (waiting on more data)
-    ASSERT_EQ(this->component.m_inRing.get_allocated_size(), buffer_size);  // data left in ring buffer
+    ASSERT_EQ(this->component.m_inRing.getSize(), buffer_size);  // data left in ring buffer
 }
 
 void FrameAccumulatorTester ::testNoFrameDetected() {
@@ -76,7 +76,7 @@ void FrameAccumulatorTester ::testNoFrameDetected() {
     // Checks
     ASSERT_from_dataReturnOut_SIZE(1);                            // input buffer ownership was returned
     ASSERT_from_dataOut_SIZE(0);                                  // No frame was sent out
-    ASSERT_EQ(this->component.m_inRing.get_allocated_size(), 0);  // all data was consumed and discarded
+    ASSERT_EQ(this->component.m_inRing.getSize(), 0);  // all data was consumed and discarded
 }
 
 void FrameAccumulatorTester ::testReceiveZeroSizeBuffer() {
@@ -89,7 +89,7 @@ void FrameAccumulatorTester ::testReceiveZeroSizeBuffer() {
     // Checks
     ASSERT_from_dataReturnOut_SIZE(1);                            // input buffer ownership was returned
     ASSERT_from_dataOut_SIZE(0);                                  // No frame was sent out
-    ASSERT_EQ(this->component.m_inRing.get_allocated_size(), 0);  // No data in ring buffer
+    ASSERT_EQ(this->component.m_inRing.getSize(), 0);  // No data in ring buffer
     ASSERT_EQ(Types::CircularBufferTester::tester_get_m_head_idx(this->component.m_inRing), 0);
 }
 
@@ -113,7 +113,7 @@ void FrameAccumulatorTester ::testAccumulateTwoBuffers() {
     // Checks
     ASSERT_from_dataReturnOut_SIZE(2);                            // both input buffers ownership were returned
     ASSERT_from_dataOut_SIZE(1);                                  // Exactly one frame was sent out
-    ASSERT_EQ(this->component.m_inRing.get_allocated_size(), 0);  // No data in ring buffer
+    ASSERT_EQ(this->component.m_inRing.getSize(), 0);  // No data in ring buffer
 }
 
 void FrameAccumulatorTester ::testAccumulateBuffersEmitFrame() {
@@ -123,7 +123,7 @@ void FrameAccumulatorTester ::testAccumulateBuffersEmitFrame() {
     // Checks
     ASSERT_from_dataReturnOut_SIZE(buffer_count);                 // all input buffers ownership were returned
     ASSERT_from_dataOut_SIZE(1);                                  // Exactly one frame was sent out
-    ASSERT_EQ(this->component.m_inRing.get_allocated_size(), 0);  // No data left in ring buffer
+    ASSERT_EQ(this->component.m_inRing.getSize(), 0);  // No data left in ring buffer
     ASSERT_EQ(this->fromPortHistory_dataOut->at(0).data.getSize(), frame_size);  // accumulated buffer size
 }
 
@@ -141,13 +141,13 @@ void FrameAccumulatorTester ::testAccumulateBuffersEmitManyFrames() {
 
         ASSERT_from_dataReturnOut_SIZE(total_buffer_received);                       // all input buffers returned
         ASSERT_from_dataOut_SIZE(i + 1);                                             // Exactly one frame was sent out
-        ASSERT_EQ(this->component.m_inRing.get_allocated_size(), 0);                 // No data left in ring buffer
+        ASSERT_EQ(this->component.m_inRing.getSize(), 0);                 // No data left in ring buffer
         ASSERT_EQ(this->fromPortHistory_dataOut->at(i).data.getSize(), frame_size);  // accumulated buffer size
     }
     // Final checks
     ASSERT_from_dataReturnOut_SIZE(total_buffer_received);        // all input buffers returned
     ASSERT_from_dataOut_SIZE(max_iters);                          // Exactly max_iters frames were sent out
-    ASSERT_EQ(this->component.m_inRing.get_allocated_size(), 0);  // No data left in ring buffer
+    ASSERT_EQ(this->component.m_inRing.getSize(), 0);  // No data left in ring buffer
 }
 
 void FrameAccumulatorTester ::testBufferReturnDeallocation() {
