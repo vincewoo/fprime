@@ -695,29 +695,29 @@ Fw::SerializeStatus CircularBuffer::copyRaw(Fw::SerialBufferBase& dest, Fw::Seri
         return status;
     }
     
-    // Data wraps around - need to copy to temporary buffer first
-    U8 temp_buffer[size];
-    FwSizeType temp_offset = 0;
-    FwSizeType remaining = size;
+    // Data wraps around
+    // Reset destination buffer first (copyRaw replaces contents)
+    dest.resetSer();
     
+    FwSizeType remaining = size;
     while (remaining > 0) {
         FwSizeType chunkSize = (remaining < (m_store_size - read_idx)) ? 
                               remaining : (m_store_size - read_idx);
         
-        (void)memcpy(&temp_buffer[temp_offset], &m_store[read_idx], chunkSize);
+        // Serialize each chunk directly into destination (appends data)
+        Fw::SerializeStatus status = dest.serializeFrom(&m_store[read_idx], chunkSize, Fw::Serialization::OMIT_LENGTH);
+        if (status != Fw::FW_SERIALIZE_OK) {
+            return status;
+        }
         
-        temp_offset += chunkSize;
         remaining -= chunkSize;
         read_idx = advance_idx(read_idx, chunkSize);
     }
     
-    // Now use setBuff with the linearized data
-    Fw::SerializeStatus status = dest.setBuff(temp_buffer, size);
-    if (status == Fw::FW_SERIALIZE_OK) {
-        m_deser_idx += size;
-    }
+    // Update deserialization index after successful copy
+    m_deser_idx += size;
     
-    return status;
+    return Fw::FW_SERIALIZE_OK;
 }
 
 Fw::SerializeStatus CircularBuffer::copyRawOffset(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size) {
