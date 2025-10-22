@@ -30,7 +30,7 @@ Fw::SerializeStatus Queue::enqueue(const U8* const message, const FwSizeType siz
     FW_ASSERT(m_message_size > 0, static_cast<FwAssertArgType>(m_message_size));  // Ensure initialization
     FW_ASSERT(m_message_size == size, static_cast<FwAssertArgType>(size),
               static_cast<FwAssertArgType>(m_message_size));  // Message size is as expected
-    return m_internal.serialize(message, m_message_size);
+    return m_internal.serializeFrom(message, m_message_size, Fw::Serialization::OMIT_LENGTH);
 }
 
 Fw::SerializeStatus Queue::dequeue(U8* const message, const FwSizeType size) {

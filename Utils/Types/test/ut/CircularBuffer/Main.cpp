@@ -73,7 +73,7 @@ TEST(CircularBufferTests, BasicSerializeTest) {
 TEST(CircularBufferTests, BasicOverflowTest) {
     // Setup state and fill it with garbage
     MockTypes::CircularState state;
-    ASSERT_EQ(Fw::FW_SERIALIZE_OK, state.getTestBuffer().serialize(state.getBuffer(), state.getRandomSize()));
+    ASSERT_EQ(Fw::FW_SERIALIZE_OK, state.getTestBuffer().serializeFrom(state.getBuffer(), state.getRandomSize(), Fw::Serialization::OMIT_LENGTH));
     state.setRemainingSize(0);
 
     // Create rules, and assign them into the array
@@ -95,16 +95,16 @@ TEST(CircularBufferTests, BasicPeekTest) {
     // Setup all circular state
     MockTypes::CircularState state;
     state.addInfinite(reinterpret_cast<U8*>(&peek_char), sizeof(peek_char));
-    state.getTestBuffer().serialize(reinterpret_cast<U8*>(&peek_char), sizeof(peek_char));
+    state.getTestBuffer().serializeFrom(reinterpret_cast<U8*>(&peek_char), sizeof(peek_char), Fw::Serialization::OMIT_LENGTH);
     state.addInfinite(&peek_u8, sizeof(peek_u8));
-    state.getTestBuffer().serialize(&peek_u8, sizeof(peek_u8));
+    state.getTestBuffer().serializeFrom(&peek_u8, sizeof(peek_u8), Fw::Serialization::OMIT_LENGTH);
     for (FwSizeType i = sizeof(U32); i > 0; i--) {
         U8 byte = peek_u32 >> ((i - 1) * 8);
         state.addInfinite(&byte, sizeof(byte));
-        state.getTestBuffer().serialize(&byte, sizeof(byte));
+        state.getTestBuffer().serializeFrom(&byte, sizeof(byte), Fw::Serialization::OMIT_LENGTH);
     }
     state.addInfinite(buffer, sizeof(buffer));
-    state.getTestBuffer().serialize(buffer, sizeof(buffer));
+    state.getTestBuffer().serializeFrom(buffer, sizeof(buffer), Fw::Serialization::OMIT_LENGTH);
     state.setRemainingSize(MAX_BUFFER_SIZE - 1030);
     // Run all peek variants
     Types::PeekOkRule peekOk("peekOk");

@@ -20,10 +20,10 @@
 namespace Types {
 
 CircularBuffer ::CircularBuffer()
-    : m_store(nullptr), m_store_size(0), m_head_idx(0), m_allocated_size(0), m_high_water_mark(0), m_deser_idx(0) {}
+    : m_store(nullptr), m_store_size(0), m_head_idx(0), m_allocated_size(0), m_high_water_mark(0), m_deser_idx(0), m_ser_idx(0) {}
 
 CircularBuffer ::CircularBuffer(U8* const buffer, const FwSizeType size)
-    : m_store(nullptr), m_store_size(0), m_head_idx(0), m_allocated_size(0), m_high_water_mark(0), m_deser_idx(0) {
+    : m_store(nullptr), m_store_size(0), m_head_idx(0), m_allocated_size(0), m_high_water_mark(0), m_deser_idx(0), m_ser_idx(0) {
     setup(buffer, size);
 }
 
@@ -39,16 +39,7 @@ void CircularBuffer ::setup(U8* const buffer, const FwSizeType size) {
     m_allocated_size = 0;
     m_high_water_mark = 0;
     m_deser_idx = 0;
-}
-
-// DEPRECATED: Calling getSize() is preferred
-FwSizeType CircularBuffer ::get_allocated_size() const {
-    return getSize();
-}
-
-// DEPRECATED: Calling getSerializeSizeLeft() is preferred
-FwSizeType CircularBuffer ::get_free_size() const {
-    return getSerializeSizeLeft();
+    m_ser_idx = 0;
 }
 
 FwSizeType CircularBuffer ::advance_idx(FwSizeType idx, FwSizeType amount) const {
@@ -56,21 +47,36 @@ FwSizeType CircularBuffer ::advance_idx(FwSizeType idx, FwSizeType amount) const
     return (idx + amount) % m_store_size;
 }
 
-Fw::SerializeStatus CircularBuffer ::serialize(const U8* const buffer, const FwSizeType size) {
-    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    FW_ASSERT(buffer != nullptr);
-    // Check there is sufficient space
-    if (size > getSerializeSizeLeft()) {
+Fw::SerializeStatus CircularBuffer ::checkSerializeSpace(const FwSizeType size) const {
+    // Calculate how much new space we need beyond current allocated size
+    FwSizeType end_offset = m_ser_idx + size;
+    FwSizeType new_space_needed = (end_offset > m_allocated_size) ? (end_offset - m_allocated_size) : 0;
+    // Check there is sufficient free space for any new data beyond allocated size
+    if (new_space_needed > (m_store_size - m_allocated_size)) {
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
     }
-    // Copy in all the supplied data
-    FwSizeType idx = advance_idx(m_head_idx, m_allocated_size);
+    return Fw::FW_SERIALIZE_OK;
+}
+
+Fw::SerializeStatus CircularBuffer ::serializeRaw(const U8* const buffer, const FwSizeType size) {
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
+    FW_ASSERT(buffer != nullptr);
+    Fw::SerializeStatus status = this->checkSerializeSpace(size);
+    if (status != Fw::FW_SERIALIZE_OK) {
+        return status;
+    }
+    // Copy in all the supplied data (no endianness conversion)
+    FwSizeType idx = advance_idx(m_head_idx, m_ser_idx);
     for (U32 i = 0; i < size; i++) {
         FW_ASSERT(idx < m_store_size, static_cast<FwAssertArgType>(idx));
         m_store[idx] = buffer[i];
         idx = advance_idx(idx);
     }
-    m_allocated_size += size;
+    m_ser_idx += size;
+    // Update allocated size if we've written beyond the current end
+    if (m_ser_idx > m_allocated_size) {
+        m_allocated_size = m_ser_idx;
+    }
     FW_ASSERT(m_allocated_size <= this->getCapacity(), static_cast<FwAssertArgType>(m_allocated_size));
     m_high_water_mark = (m_high_water_mark > m_allocated_size) ? m_high_water_mark : m_allocated_size;
     return Fw::FW_SERIALIZE_OK;
@@ -136,12 +142,14 @@ Fw::SerializeStatus CircularBuffer ::rotate(FwSizeType amount) {
     }
     m_head_idx = advance_idx(m_head_idx, amount);
     m_allocated_size -= amount;
+    // After rotation, set serialization index to the end to maintain append behavior
+    // This ensures backward compatibility with the original behavior where serialization
+    // always happened at m_allocated_size
+    m_ser_idx = m_allocated_size;
+    // Adjust deserialization index: if it's beyond the rotated amount, subtract the rotation
+    // Otherwise, it's in the rotated-away region, so reset to 0
+    m_deser_idx = (m_deser_idx >= amount) ? (m_deser_idx - amount) : 0;
     return Fw::FW_SERIALIZE_OK;
-}
-
-// DEPRECATED: Calling getCapacity() is preferred
-FwSizeType CircularBuffer ::get_capacity() const {
-    return getCapacity();
 }
 
 FwSizeType CircularBuffer ::get_high_water_mark() const {
@@ -156,30 +164,47 @@ void CircularBuffer ::clear_high_water_mark() {
 // SerialBufferBase interface implementation
 // ----------------------------------------------------------------------
 
-// Helper function for serializing multi-byte values with endianness support
+// Helper member function for serializing multi-byte values with endianness support
 template<typename T>
-static inline Fw::SerializeStatus serializeMultibyte(
-    CircularBuffer* buffer,
-    T value,
-    Fw::Endianness mode
-) {
-    if (sizeof(T) > buffer->getSerializeSizeLeft()) {
-        return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
+Fw::SerializeStatus CircularBuffer::serializeMultibyteValue(T value, Fw::Endianness mode) {
+    FW_ASSERT(this->m_store != nullptr && this->m_store_size != 0);
+    
+    Fw::SerializeStatus status = this->checkSerializeSpace(sizeof(T));
+    if (status != Fw::FW_SERIALIZE_OK) {
+        return status;
     }
-    U8 bytes[sizeof(T)];
-    T temp = value;
+    
+    FwSizeType idx = this->advance_idx(this->m_head_idx, this->m_ser_idx);
+    
     if (mode == Fw::Endianness::BIG) {
+        // For big-endian, write most significant byte first
         for (FwSizeType i = 0; i < sizeof(T); i++) {
-            bytes[sizeof(T) - 1 - i] = static_cast<U8>(temp & 0xFF);
-            temp >>= 8;
+            FW_ASSERT(idx < this->m_store_size, static_cast<FwAssertArgType>(idx));
+            // Extract byte from MSB to LSB and write sequentially
+            this->m_store[idx] = static_cast<U8>((value >> ((sizeof(T) - 1 - i) * 8)) & 0xFF);
+            idx = this->advance_idx(idx);
         }
     } else {
+        // For little-endian, write least significant byte first
+        T temp = value;
         for (FwSizeType i = 0; i < sizeof(T); i++) {
-            bytes[i] = static_cast<U8>(temp & 0xFF);
+            FW_ASSERT(idx < this->m_store_size, static_cast<FwAssertArgType>(idx));
+            this->m_store[idx] = static_cast<U8>(temp & 0xFF);
             temp >>= 8;
+            idx = this->advance_idx(idx);
         }
     }
-    return buffer->serialize(bytes, sizeof(T));
+    
+    this->m_ser_idx += sizeof(T);
+    // Update allocated size if we've written beyond the current end
+    if (this->m_ser_idx > this->m_allocated_size) {
+        this->m_allocated_size = this->m_ser_idx;
+    }
+    FW_ASSERT(this->m_allocated_size <= this->getCapacity(), static_cast<FwAssertArgType>(this->m_allocated_size));
+    this->m_high_water_mark = (this->m_high_water_mark > this->m_allocated_size) ? 
+                               this->m_high_water_mark : this->m_allocated_size;
+    
+    return Fw::FW_SERIALIZE_OK;
 }
 
 // Helper function for deserializing multi-byte values with endianness support
@@ -215,7 +240,7 @@ static inline Fw::SerializeStatus deserializeMultibyte(
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(U8 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return serialize(&val, sizeof(val));
+    return this->serializeRaw(&val, sizeof(val));
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I8 val, Fw::Endianness mode) {
@@ -225,7 +250,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I8 val, Fw::Endianness mode) {
 #if FW_HAS_16_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U16 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return serializeMultibyte<U16>(this, val, mode);
+    return this->serializeMultibyteValue<U16>(val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I16 val, Fw::Endianness mode) {
@@ -236,7 +261,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I16 val, Fw::Endianness mode) 
 #if FW_HAS_32_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U32 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return serializeMultibyte<U32>(this, val, mode);
+    return this->serializeMultibyteValue<U32>(val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I32 val, Fw::Endianness mode) {
@@ -247,7 +272,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I32 val, Fw::Endianness mode) 
 #if FW_HAS_64_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U64 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return serializeMultibyte<U64>(this, val, mode);
+    return this->serializeMultibyteValue<U64>(val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I64 val, Fw::Endianness mode) {
@@ -272,7 +297,8 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(F64 val, Fw::Endianness mode) 
 Fw::SerializeStatus CircularBuffer::serializeFrom(bool val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     U8 byte = val ? FW_SERIALIZE_TRUE_VALUE : FW_SERIALIZE_FALSE_VALUE;
-    return serialize(&byte, sizeof(byte));
+    // Single byte - endianness doesn't apply
+    return this->serializeRaw(&byte, sizeof(byte));
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(const void* val, Fw::Endianness mode) {
@@ -292,17 +318,19 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(const U8* buff, FwSizeType len
             return status;
         }
     }
-    return serialize(buff, length);
+    // Raw byte array - no endianness conversion
+    return this->serializeRaw(buff, length);
 }
 
-Fw::SerializeStatus CircularBuffer::serializeFrom(const Fw::SerializeBufferBase& val, Fw::Endianness mode) {
+Fw::SerializeStatus CircularBuffer::serializeFrom(const Fw::LinearBufferBase& val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(val.getBuffAddr() != nullptr);
     Fw::SerializeStatus status = serializeSize(val.getSize(), mode);
     if (status != Fw::FW_SERIALIZE_OK) {
         return status;
     }
-    return serialize(val.getBuffAddr(), val.getSize());
+    // Already serialized data - no endianness conversion
+    return this->serializeRaw(val.getBuffAddr(), val.getSize());
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(const Fw::Serializable& val, Fw::Endianness mode) {
@@ -310,7 +338,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(const Fw::Serializable& val, F
     // Create a temporary external buffer wrapping our circular buffer's tail
     // This is a workaround since we can't directly serialize into circular buffer
     // We'll need to use a temporary linear buffer
-    U8 tempBuf[512];  // Reasonable size for most serializable objects
+    U8 tempBuf[FW_COM_BUFFER_MAX_SIZE];  // Standard F' communication buffer size
     Fw::ExternalSerializeBuffer tempBuffer(tempBuf, sizeof(tempBuf));
     
     Fw::SerializeStatus status = val.serializeTo(tempBuffer, mode);
@@ -318,7 +346,8 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(const Fw::Serializable& val, F
         return status;
     }
     
-    return serialize(tempBuffer.getBuffAddr(), tempBuffer.getSize());
+    // Already serialized data - no endianness conversion
+    return this->serializeRaw(tempBuffer.getBuffAddr(), tempBuffer.getSize());
 }
 
 Fw::SerializeStatus CircularBuffer::serializeSize(const FwSizeType size, Fw::Endianness mode) {
@@ -504,7 +533,7 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(Fw::Serializable& val, Fw::End
     return status;
 }
 
-Fw::SerializeStatus CircularBuffer::deserializeTo(Fw::SerializeBufferBase& val, Fw::Endianness mode) {
+Fw::SerializeStatus CircularBuffer::deserializeTo(Fw::LinearBufferBase& val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
     FW_ASSERT(val.getBuffAddr() != nullptr);
@@ -548,6 +577,7 @@ void CircularBuffer::resetSer() {
     m_head_idx = 0;
     m_allocated_size = 0;
     m_deser_idx = 0;
+    m_ser_idx = 0;
 }
 
 void CircularBuffer::resetDeser() {
@@ -556,11 +586,12 @@ void CircularBuffer::resetDeser() {
 }
 
 Fw::SerializeStatus CircularBuffer::moveSerToOffset(FwSizeType offset) {
-    // For circular buffer, we can't arbitrarily move serialization offset
-    // We can only append to the end. Return error if offset doesn't match current end.
-    if (offset != m_allocated_size) {
+    FW_ASSERT(this->m_store != nullptr && this->m_store_size != 0);  // setup method was called
+    // Check if offset is within the capacity of the circular buffer
+    if (offset > this->getCapacity()) {
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
     }
+    this->m_ser_idx = offset;
     return Fw::FW_SERIALIZE_OK;
 }
 
@@ -575,13 +606,16 @@ Fw::SerializeStatus CircularBuffer::moveDeserToOffset(FwSizeType offset) {
 
 Fw::SerializeStatus CircularBuffer::serializeSkip(FwSizeType numBytesToSkip) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    // For circular buffer, skipping during serialization doesn't make sense
-    // since we always append to the end
-    if (numBytesToSkip > getSerializeSizeLeft()) {
-        return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
+    Fw::SerializeStatus status = this->checkSerializeSpace(numBytesToSkip);
+    if (status != Fw::FW_SERIALIZE_OK) {
+        return status;
     }
-    // Allocate space by advancing allocated size
-    m_allocated_size += numBytesToSkip;
+    // Advance serialization index
+    m_ser_idx += numBytesToSkip;
+    // Update allocated size if we've moved beyond the current end
+    if (m_ser_idx > m_allocated_size) {
+        m_allocated_size = m_ser_idx;
+    }
     return Fw::FW_SERIALIZE_OK;
 }
 
@@ -619,9 +653,9 @@ Fw::SerializeStatus CircularBuffer::setBuff(const U8* src, Fw::Serializable::Siz
     FW_ASSERT(src != nullptr);
     FW_ASSERT(m_store != nullptr && m_store_size != 0);
     
-    // Clear existing data and serialize new data
+    // Clear existing data and copy raw bytes
     resetSer();
-    return serialize(src, length);
+    return this->serializeRaw(src, length);
 }
 
 Fw::SerializeStatus CircularBuffer::setBuffLen(Fw::Serializable::SizeType length) {
@@ -629,6 +663,7 @@ Fw::SerializeStatus CircularBuffer::setBuffLen(Fw::Serializable::SizeType length
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
     }
     m_allocated_size = length;
+    m_ser_idx = length;
     m_deser_idx = 0;
     return Fw::FW_SERIALIZE_OK;
 }

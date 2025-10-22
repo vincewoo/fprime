@@ -64,7 +64,9 @@ class CircularBuffer : public Fw::SerialBufferBase {
      * \param size: size of the supplied buffer.
      * \return Fw::FW_SERIALIZE_OK on success or something else on error
      */
-    Fw::SerializeStatus serialize(const U8* const buffer, const FwSizeType size);
+    DEPRECATED(Fw::SerializeStatus serialize(const U8* const buffer, const FwSizeType size), "Use serializeFrom(buffer, size, Fw::Serialization::OMIT_LENGTH) instead") {
+        return serializeFrom(buffer, size, Fw::Serialization::OMIT_LENGTH);
+    }
 
     /**
      * Deserialize data into the given variable without moving the head index
@@ -109,20 +111,26 @@ class CircularBuffer : public Fw::SerialBufferBase {
      * Get the number of bytes allocated in the buffer
      * \return number of bytes
      */
-    DEPRECATED(FwSizeType get_allocated_size() const, "Use getSize() instead");
+    DEPRECATED(FwSizeType get_allocated_size() const, "Use getSize() instead") {
+        return getSize();
+    }
 
     /**
      * Get the number of free bytes, i.e., the number
      * of bytes that may be stored in the buffer without
      * deleting data and without exceeding the buffer capacity
      */
-    DEPRECATED(FwSizeType get_free_size() const, "Use getSerializeSizeLeft() instead");
+    DEPRECATED(FwSizeType get_free_size() const, "Use getSerializeSizeLeft() instead") {
+        return getSerializeSizeLeft();
+    }
 
     /**
      * Get the logical capacity of the buffer, i.e., the number of available
      * bytes when the buffer is empty
      */
-    DEPRECATED(FwSizeType get_capacity() const, "Use getCapacity() instead");
+    DEPRECATED(FwSizeType get_capacity() const, "Use getCapacity() instead") {
+        return getCapacity();
+    }
 
     /**
      * Return the largest tracked allocated size
@@ -689,6 +697,35 @@ class CircularBuffer : public Fw::SerialBufferBase {
      * \return: new index value
      */
     FwSizeType advance_idx(FwSizeType idx, FwSizeType amount = 1) const;
+    
+    /**
+     * Helper function for serializing multi-byte values with endianness support.
+     * Writes bytes directly to the circular buffer without intermediate copy.
+     * \param value: value to serialize
+     * \param mode: endianness mode
+     * \return: serialization status
+     */
+    template<typename T>
+    Fw::SerializeStatus serializeMultibyteValue(T value, Fw::Endianness mode);
+    
+    /**
+     * Helper function for raw byte copying without endianness conversion.
+     * Used for single bytes, byte arrays, and pre-serialized data.
+     * \param buffer: pointer to source data
+     * \param size: number of bytes to copy
+     * \return: serialization status
+     */
+    Fw::SerializeStatus serializeRaw(const U8* const buffer, const FwSizeType size);
+    
+    /**
+     * Helper function to check if there is sufficient space for serialization.
+     * Validates that writing 'size' bytes at the current serialization index
+     * will not exceed the buffer capacity.
+     * \param size: number of bytes to check space for
+     * \return: serialization status (FW_SERIALIZE_OK or FW_SERIALIZE_NO_ROOM_LEFT)
+     */
+    Fw::SerializeStatus checkSerializeSpace(const FwSizeType size) const;
+    
     //! Physical store backing this circular buffer
     U8* m_store;
     //! Size of the physical store
@@ -702,6 +739,8 @@ class CircularBuffer : public Fw::SerialBufferBase {
     FwSizeType m_high_water_mark;
     //! Deserialization index (offset from head for reading)
     FwSizeType m_deser_idx;
+    //! Serialization index (offset from head for writing)
+    FwSizeType m_ser_idx;
 };
 }  // End Namespace Types
 #endif

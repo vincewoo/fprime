@@ -32,7 +32,7 @@ bool SerializeOkRule::precondition(const MockTypes::CircularState& state) {
 
 void SerializeOkRule::action(MockTypes::CircularState& state) {
     state.checkSizes();
-    Fw::SerializeStatus status = state.getTestBuffer().serialize(state.getBuffer(), state.getRandomSize());
+    Fw::SerializeStatus status = state.getTestBuffer().serializeFrom(state.getBuffer(), state.getRandomSize(), Fw::Serialization::OMIT_LENGTH);
     state.setRemainingSize(state.getRemainingSize() - state.getRandomSize());
     ASSERT_TRUE(state.addInfinite(state.getBuffer(), state.getRandomSize()));
     ASSERT_EQ(status, Fw::FW_SERIALIZE_OK);
@@ -46,7 +46,7 @@ bool SerializeOverflowRule::precondition(const MockTypes::CircularState& state) 
 }
 
 void SerializeOverflowRule::action(MockTypes::CircularState& state) {
-    Fw::SerializeStatus status = state.getTestBuffer().serialize(state.getBuffer(), state.getRandomSize());
+    Fw::SerializeStatus status = state.getTestBuffer().serializeFrom(state.getBuffer(), state.getRandomSize(), Fw::Serialization::OMIT_LENGTH);
     ASSERT_EQ(status, Fw::FW_SERIALIZE_NO_ROOM_LEFT);
 }
 

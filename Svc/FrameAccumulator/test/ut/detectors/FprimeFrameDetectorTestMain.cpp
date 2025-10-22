@@ -59,7 +59,7 @@ FwSizeType generate_random_fprime_frame(Types::CircularBuffer& circular_buffer) 
             static_cast<U8>((crc_result.asBigEndianU32() >> (8 * (3 - i))) & 0xFF);
     }
     // Serialize frame into circular buffer
-    circular_buffer.serialize(fprime_frame, fprime_frame_size);
+    circular_buffer.serializeFrom(fprime_frame, fprime_frame_size, Fw::Serialization::OMIT_LENGTH);
 
     // Uncomment for debugging
     // printf("Serialized %llu bytes:\n", fprime_frame_size);
@@ -80,7 +80,7 @@ TEST(FprimeFrameDetector, TestBufferTooSmall) {
         Svc::FprimeProtocol::FrameHeader::SERIALIZED_SIZE + Svc::FprimeProtocol::FrameTrailer::SERIALIZED_SIZE;
     U32 invalid_size = STest::Random::lowerUpper(1, minimum_valid_size - 1);
     // Set the circular buffer to hold data of invalid size
-    circular_buffer.serialize(buffer, invalid_size);
+    circular_buffer.serializeFrom(buffer, invalid_size, Fw::Serialization::OMIT_LENGTH);
 
     Svc::FrameDetector::Status status;
     FwSizeType size_out = 0;

@@ -77,7 +77,7 @@ void FrameAccumulator ::processBuffer(Fw::Buffer& buffer) {
         const FwSizeType ringFreeSize = this->m_inRing.getSerializeSizeLeft();
         const FwSizeType serSize = (ringFreeSize <= remaining) ? ringFreeSize : remaining;
         // Serialize data into the ring buffer
-        const Fw::SerializeStatus status = this->m_inRing.serialize(&bufferData[offset], serSize);
+        const Fw::SerializeStatus status = this->m_inRing.serializeFrom(&bufferData[offset], serSize, Fw::Serialization::OMIT_LENGTH);
         // If data does not fit, there is a coding error
         FW_ASSERT(status == Fw::FW_SERIALIZE_OK, static_cast<FwAssertArgType>(status),
                   static_cast<FwAssertArgType>(offset), static_cast<FwAssertArgType>(serSize));
