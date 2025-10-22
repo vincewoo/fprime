@@ -12,22 +12,22 @@
  *  Revised March 2022
  *      Author: bocchino
  */
+#include <Utils/Types/CircularBuffer.hpp>
 #include <Fw/FPrimeBasicTypes.hpp>
 #include <Fw/Types/Assert.hpp>
-#include <Utils/Types/CircularBuffer.hpp>
 #include <cstring>
 
 namespace Types {
 
-CircularBuffer ::CircularBuffer()
+CircularBuffer::CircularBuffer()
     : m_store(nullptr), m_store_size(0), m_head_idx(0), m_allocated_size(0), m_high_water_mark(0), m_deser_idx(0), m_ser_idx(0) {}
 
-CircularBuffer ::CircularBuffer(U8* const buffer, const FwSizeType size)
+CircularBuffer::CircularBuffer(U8* const buffer, const FwSizeType size)
     : m_store(nullptr), m_store_size(0), m_head_idx(0), m_allocated_size(0), m_high_water_mark(0), m_deser_idx(0), m_ser_idx(0) {
     setup(buffer, size);
 }
 
-void CircularBuffer ::setup(U8* const buffer, const FwSizeType size) {
+void CircularBuffer::setup(U8* const buffer, const FwSizeType size) {
     FW_ASSERT(size > 0);
     FW_ASSERT(buffer != nullptr);
     FW_ASSERT(m_store == nullptr && m_store_size == 0);  // Not already setup
@@ -42,7 +42,7 @@ void CircularBuffer ::setup(U8* const buffer, const FwSizeType size) {
     m_ser_idx = 0;
 }
 
-inline FwSizeType CircularBuffer ::advance_idx(FwSizeType idx, FwSizeType amount) const {
+inline FwSizeType CircularBuffer::advance_idx(FwSizeType idx, FwSizeType amount) const {
     FW_ASSERT(idx < m_store_size, static_cast<FwAssertArgType>(idx));
     FwSizeType new_idx = idx + amount;
     while (new_idx >= m_store_size) {
@@ -51,7 +51,7 @@ inline FwSizeType CircularBuffer ::advance_idx(FwSizeType idx, FwSizeType amount
     return new_idx;
 }
 
-inline Fw::SerializeStatus CircularBuffer ::checkSerializeSpace(const FwSizeType size) const {
+inline Fw::SerializeStatus CircularBuffer::checkSerializeSpace(const FwSizeType size) const {
     // Calculate how much new space we need beyond current allocated size
     FwSizeType end_offset = m_ser_idx + size;
     FwSizeType new_space_needed = (end_offset > m_allocated_size) ? (end_offset - m_allocated_size) : 0;
@@ -62,7 +62,7 @@ inline Fw::SerializeStatus CircularBuffer ::checkSerializeSpace(const FwSizeType
     return Fw::FW_SERIALIZE_OK;
 }
 
-Fw::SerializeStatus CircularBuffer ::serializeRaw(const U8* const buffer, const FwSizeType size) {
+Fw::SerializeStatus CircularBuffer::serializeRaw(const U8* const buffer, const FwSizeType size) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(buffer != nullptr);
     Fw::SerializeStatus status = this->checkSerializeSpace(size);
@@ -98,12 +98,12 @@ Fw::SerializeStatus CircularBuffer ::serializeRaw(const U8* const buffer, const 
     return Fw::FW_SERIALIZE_OK;
 }
 
-Fw::SerializeStatus CircularBuffer ::peek(char& value, FwSizeType offset) const {
+Fw::SerializeStatus CircularBuffer::peek(char& value, FwSizeType offset) const {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     return peek(reinterpret_cast<U8&>(value), offset);
 }
 
-Fw::SerializeStatus CircularBuffer ::peek(U8& value, FwSizeType offset) const {
+Fw::SerializeStatus CircularBuffer::peek(U8& value, FwSizeType offset) const {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     // Check there is sufficient data
     if ((sizeof(U8) + offset) > m_allocated_size) {
@@ -115,7 +115,7 @@ Fw::SerializeStatus CircularBuffer ::peek(U8& value, FwSizeType offset) const {
     return Fw::FW_SERIALIZE_OK;
 }
 
-Fw::SerializeStatus CircularBuffer ::peek(U32& value, FwSizeType offset) const {
+Fw::SerializeStatus CircularBuffer::peek(U32& value, FwSizeType offset) const {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     // Check there is sufficient data
     if ((sizeof(U32) + offset) > m_allocated_size) {
@@ -133,7 +133,7 @@ Fw::SerializeStatus CircularBuffer ::peek(U32& value, FwSizeType offset) const {
     return Fw::FW_SERIALIZE_OK;
 }
 
-Fw::SerializeStatus CircularBuffer ::peek(U8* buffer, FwSizeType size, FwSizeType offset) const {
+Fw::SerializeStatus CircularBuffer::peek(U8* buffer, FwSizeType size, FwSizeType offset) const {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(buffer != nullptr);
     // Check there is sufficient data
@@ -159,7 +159,7 @@ Fw::SerializeStatus CircularBuffer ::peek(U8* buffer, FwSizeType size, FwSizeTyp
     return Fw::FW_SERIALIZE_OK;
 }
 
-Fw::SerializeStatus CircularBuffer ::rotate(FwSizeType amount) {
+Fw::SerializeStatus CircularBuffer::rotate(FwSizeType amount) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     // Check there is sufficient data
     if (amount > m_allocated_size) {
@@ -177,11 +177,11 @@ Fw::SerializeStatus CircularBuffer ::rotate(FwSizeType amount) {
     return Fw::FW_SERIALIZE_OK;
 }
 
-FwSizeType CircularBuffer ::get_high_water_mark() const {
+FwSizeType CircularBuffer::get_high_water_mark() const {
     return m_high_water_mark;
 }
 
-void CircularBuffer ::clear_high_water_mark() {
+void CircularBuffer::clear_high_water_mark() {
     m_high_water_mark = 0;
 }
 

@@ -545,7 +545,7 @@ class CircularBuffer : public Fw::SerialBufferBase {
     //! \param dest Destination serialization buffer to receive the bytes (its contents are replaced)
     //! \param size Number of bytes to copy from the source
     //! \return `FW_SERIALIZE_OK` on success; `FW_SERIALIZE_NO_ROOM_LEFT` if destination capacity is insufficient;
-    //!         `FW_DESERIALIZE_SIZE_MISMATCH` if source does not contain `size` bytes remaining
+    //!         `FW_DESERIALIZE_BUFFER_EMPTY` if source does not contain `size` bytes remaining
     Fw::SerializeStatus copyRaw(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size) override;
 
     //! \brief Append raw bytes to destination (no length) and advance source offset
@@ -564,7 +564,7 @@ class CircularBuffer : public Fw::SerialBufferBase {
     //! \param dest Destination serialization buffer to append to
     //! \param size Number of bytes to copy from the source and append to dest
     //! \return `FW_SERIALIZE_OK` on success; `FW_SERIALIZE_NO_ROOM_LEFT` if destination capacity is insufficient;
-    //!         `FW_DESERIALIZE_SIZE_MISMATCH` if source does not contain `size` bytes remaining
+    //!         `FW_DESERIALIZE_BUFFER_EMPTY` if source does not contain `size` bytes remaining
     Fw::SerializeStatus copyRawOffset(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size) override;
 
     // Buffer management methods
