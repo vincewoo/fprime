@@ -44,8 +44,11 @@ void CircularBuffer::setup(U8* const buffer, const FwSizeType size) {
 
 inline FwSizeType CircularBuffer::advance_idx(FwSizeType idx, FwSizeType amount) const {
     FW_ASSERT(idx < m_store_size, static_cast<FwAssertArgType>(idx));
+    if (amount >= m_store_size) {
+        amount %= m_store_size;
+    }
     FwSizeType new_idx = idx + amount;
-    while (new_idx >= m_store_size) {
+    if (new_idx >= m_store_size) {
         new_idx -= m_store_size;
     }
     return new_idx;
@@ -188,35 +191,6 @@ void CircularBuffer::clear_high_water_mark() {
 // ----------------------------------------------------------------------
 // SerialBufferBase interface implementation
 // ----------------------------------------------------------------------
-
-// Helper member function for serializing multi-byte values with endianness support
-template<typename T>
-Fw::SerializeStatus CircularBuffer::serializeMultibyteValue(T value, Fw::Endianness mode) {
-    FW_ASSERT(this->m_store != nullptr && this->m_store_size != 0);
-    
-    Fw::SerializeStatus status = this->checkSerializeSpace(sizeof(T));
-    if (status != Fw::FW_SERIALIZE_OK) {
-        return status;
-    }
-    
-    U8 bytes[sizeof(T)];
-    
-    if (mode == Fw::Endianness::BIG) {
-        // Big-endian: MSB first
-        for (FwSizeType i = 0; i < sizeof(T); i++) {
-            bytes[i] = static_cast<U8>((value >> ((sizeof(T) - 1 - i) * 8)) & 0xFF);
-        }
-    } else {
-        // Little-endian: LSB first
-        T temp = value;
-        for (FwSizeType i = 0; i < sizeof(T); i++) {
-            bytes[i] = static_cast<U8>(temp & 0xFF);
-            temp >>= 8;
-        }
-    }
-    
-    return this->serializeRaw(bytes, sizeof(T));
-}
 
 // Helper function for deserializing multi-byte values with endianness support
 template<typename T>
@@ -752,6 +726,14 @@ Fw::SerializeStatus CircularBuffer::copyRawOffset(Fw::SerialBufferBase& dest, Fw
     
     // Get the current read position (from deserialization index)
     FwSizeType read_idx = advance_idx(m_head_idx, m_deser_idx);
+    FwSizeType bytes_to_end = m_store_size - read_idx;
+    if (size <= bytes_to_end) {
+        Fw::SerializeStatus status = dest.serializeFrom(&m_store[read_idx], size, Fw::Serialization::OMIT_LENGTH);
+        if (status == Fw::FW_SERIALIZE_OK) {
+            m_deser_idx += size;
+        }
+        return status;
+    }
     
     // Copy data in chunks that don't wrap around the circular buffer
     FwSizeType remaining = size;

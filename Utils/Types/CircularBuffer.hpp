@@ -18,6 +18,7 @@
 #define TYPES_CIRCULAR_BUFFER_HPP
 
 #include <Fw/FPrimeBasicTypes.hpp>
+#include <Fw/Types/Assert.hpp>
 #include <Fw/Types/Serializable.hpp>
 
 namespace Types {
@@ -707,7 +708,28 @@ class CircularBuffer : public Fw::SerialBufferBase {
      * \return: serialization status
      */
     template<typename T>
-    Fw::SerializeStatus serializeMultibyteValue(T value, Fw::Endianness mode);
+    inline Fw::SerializeStatus serializeMultibyteValue(T value, Fw::Endianness mode) {
+        FW_ASSERT(this->m_store != nullptr && this->m_store_size != 0);
+        Fw::SerializeStatus status = this->checkSerializeSpace(sizeof(T));
+        if (status != Fw::FW_SERIALIZE_OK) {
+            return status;
+        }
+        U8 bytes[sizeof(T)];
+        if (mode == Fw::Endianness::BIG) {
+            // Big-endian: MSB first
+            for (FwSizeType i = 0; i < sizeof(T); i++) {
+                bytes[i] = static_cast<U8>((value >> ((sizeof(T) - 1 - i) * 8)) & 0xFF);
+            }
+        } else {
+            // Little-endian: LSB first
+            T temp = value;
+            for (FwSizeType i = 0; i < sizeof(T); i++) {
+                bytes[i] = static_cast<U8>(temp & 0xFF);
+                temp >>= 8;
+            }
+        }
+        return this->serializeRaw(bytes, sizeof(T));
+    }
     
     /**
      * Helper function for raw byte copying without endianness conversion.
