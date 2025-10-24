@@ -220,10 +220,10 @@ static inline Fw::SerializeStatus deserializeMultibyte(
     CircularBuffer* buffer,
     T& value,
     Fw::Endianness mode,
-    FwSizeType allocatedSize,
+    FwSizeType availableSize,
     FwSizeType& deserIdx
 ) {
-    if (sizeof(T) > (allocatedSize - deserIdx)) {
+    if (sizeof(T) > (availableSize - deserIdx)) {
         return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
     }
     U8 bytes[sizeof(T)];
