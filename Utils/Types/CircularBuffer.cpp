@@ -19,6 +19,30 @@
 
 namespace Types {
 
+// Helper function for serializing multi-byte values with endianness support
+template<typename T>
+static inline Fw::SerializeStatus serializeMultibyteValue(
+    CircularBuffer* buffer,
+    T value,
+    Fw::Endianness mode
+) {
+    U8 bytes[sizeof(T)];
+    if (mode == Fw::Endianness::BIG) {
+        // Big-endian: MSB first
+        for (FwSizeType i = 0; i < sizeof(T); i++) {
+            bytes[i] = static_cast<U8>((value >> ((sizeof(T) - 1 - i) * 8)) & 0xFF);
+        }
+    } else {
+        // Little-endian: LSB first
+        T temp = value;
+        for (FwSizeType i = 0; i < sizeof(T); i++) {
+            bytes[i] = static_cast<U8>(temp & 0xFF);
+            temp >>= 8;
+        }
+    }
+    return buffer->serializeRaw(bytes, sizeof(T));
+}
+
 CircularBuffer::CircularBuffer()
     : m_store(nullptr), m_store_size(0), m_head_idx(0), m_allocated_size(0), m_high_water_mark(0), m_deser_idx(0), m_ser_idx(0) {}
 
@@ -55,11 +79,9 @@ inline FwSizeType CircularBuffer::advance_idx(FwSizeType idx, FwSizeType amount)
 }
 
 inline Fw::SerializeStatus CircularBuffer::checkSerializeSpace(const FwSizeType size) const {
-    // Calculate how much new space we need beyond current allocated size
+    // Check if the serialization would exceed the buffer capacity
     FwSizeType end_offset = m_ser_idx + size;
-    FwSizeType new_space_needed = (end_offset > m_allocated_size) ? (end_offset - m_allocated_size) : 0;
-    // Check there is sufficient free space for any new data beyond allocated size
-    if (new_space_needed > (m_store_size - m_allocated_size)) {
+    if (end_offset > m_store_size) {
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
     }
     return Fw::FW_SERIALIZE_OK;
@@ -98,6 +120,7 @@ Fw::SerializeStatus CircularBuffer::serializeRaw(const U8* const buffer, const F
         }
     }
     FW_ASSERT(m_allocated_size <= this->getCapacity(), static_cast<FwAssertArgType>(m_allocated_size));
+    FW_ASSERT(m_ser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_ser_idx), static_cast<FwAssertArgType>(m_allocated_size));
     return Fw::FW_SERIALIZE_OK;
 }
 
@@ -170,10 +193,9 @@ Fw::SerializeStatus CircularBuffer::rotate(FwSizeType amount) {
     }
     m_head_idx = advance_idx(m_head_idx, amount);
     m_allocated_size -= amount;
-    // After rotation, set serialization index to the end to maintain append behavior
-    // This ensures backward compatibility with the original behavior where serialization
-    // always happened at m_allocated_size
-    m_ser_idx = m_allocated_size;
+    // Adjust serialization index: if it's beyond the rotated amount, subtract the rotation
+    // Otherwise, it's in the rotated-away region, so reset to 0
+    m_ser_idx = (m_ser_idx >= amount) ? (m_ser_idx - amount) : 0;
     // Adjust deserialization index: if it's beyond the rotated amount, subtract the rotation
     // Otherwise, it's in the rotated-away region, so reset to 0
     m_deser_idx = (m_deser_idx >= amount) ? (m_deser_idx - amount) : 0;
@@ -237,7 +259,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I8 val, Fw::Endianness mode) {
 #if FW_HAS_16_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U16 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return this->serializeMultibyteValue<U16>(val, mode);
+    return serializeMultibyteValue<U16>(this, val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I16 val, Fw::Endianness mode) {
@@ -248,7 +270,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I16 val, Fw::Endianness mode) 
 #if FW_HAS_32_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U32 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return this->serializeMultibyteValue<U32>(val, mode);
+    return serializeMultibyteValue<U32>(this, val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I32 val, Fw::Endianness mode) {
@@ -259,7 +281,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(I32 val, Fw::Endianness mode) 
 #if FW_HAS_64_BIT == 1
 Fw::SerializeStatus CircularBuffer::serializeFrom(U64 val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    return this->serializeMultibyteValue<U64>(val, mode);
+    return serializeMultibyteValue<U64>(this, val, mode);
 }
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(I64 val, Fw::Endianness mode) {
@@ -528,6 +550,10 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(Fw::LinearBufferBase& val, Fw:
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
     FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
     FW_ASSERT(val.getBuffAddr() != nullptr);
+    
+    // Save deserialization index to restore on failure
+    FwSizeType savedDeserIdx = m_deser_idx;
+    
     FwSizeType size;
     Fw::SerializeStatus status = deserializeSize(size, mode);
     if (status != Fw::FW_SERIALIZE_OK) {
@@ -535,10 +561,14 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(Fw::LinearBufferBase& val, Fw:
     }
     
     if (size > val.getCapacity()) {
+        // Restore deserialization index on failure
+        m_deser_idx = savedDeserIdx;
         return Fw::FW_DESERIALIZE_SIZE_MISMATCH;
     }
     
     if ((m_deser_idx + size) > m_allocated_size) {
+        // Restore deserialization index on failure
+        m_deser_idx = savedDeserIdx;
         return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
     }
     
@@ -547,7 +577,13 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(Fw::LinearBufferBase& val, Fw:
         status = val.setBuffLen(size);
         if (status == Fw::FW_SERIALIZE_OK) {
             m_deser_idx += size;
+        } else {
+            // Restore deserialization index on failure
+            m_deser_idx = savedDeserIdx;
         }
+    } else {
+        // Restore deserialization index on failure
+        m_deser_idx = savedDeserIdx;
     }
     return status;
 }

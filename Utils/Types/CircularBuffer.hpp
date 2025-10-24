@@ -25,6 +25,10 @@ namespace Types {
 
 class CircularBuffer : public Fw::SerialBufferBase {
     friend class CircularBufferTester;
+    
+    // Friend declaration for static helper function
+    template<typename T>
+    friend Fw::SerializeStatus serializeMultibyteValue(CircularBuffer* buffer, T value, Fw::Endianness mode);
 
   public:
     /**
@@ -699,37 +703,6 @@ class CircularBuffer : public Fw::SerialBufferBase {
      * \return: new index value
      */
     inline FwSizeType advance_idx(FwSizeType idx, FwSizeType amount = 1) const;
-    
-    /**
-     * Helper function for serializing multi-byte values with endianness support.
-     * Writes bytes directly to the circular buffer without intermediate copy.
-     * \param value: value to serialize
-     * \param mode: endianness mode
-     * \return: serialization status
-     */
-    template<typename T>
-    inline Fw::SerializeStatus serializeMultibyteValue(T value, Fw::Endianness mode) {
-        FW_ASSERT(this->m_store != nullptr && this->m_store_size != 0);
-        Fw::SerializeStatus status = this->checkSerializeSpace(sizeof(T));
-        if (status != Fw::FW_SERIALIZE_OK) {
-            return status;
-        }
-        U8 bytes[sizeof(T)];
-        if (mode == Fw::Endianness::BIG) {
-            // Big-endian: MSB first
-            for (FwSizeType i = 0; i < sizeof(T); i++) {
-                bytes[i] = static_cast<U8>((value >> ((sizeof(T) - 1 - i) * 8)) & 0xFF);
-            }
-        } else {
-            // Little-endian: LSB first
-            T temp = value;
-            for (FwSizeType i = 0; i < sizeof(T); i++) {
-                bytes[i] = static_cast<U8>(temp & 0xFF);
-                temp >>= 8;
-            }
-        }
-        return this->serializeRaw(bytes, sizeof(T));
-    }
     
     /**
      * Helper function for raw byte copying without endianness conversion.
