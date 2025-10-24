@@ -214,7 +214,20 @@ void CircularBuffer::clear_high_water_mark() {
 // SerialBufferBase interface implementation
 // ----------------------------------------------------------------------
 
-// Helper function for deserializing multi-byte values with endianness support
+/**
+ * \brief Helper function for deserializing multi-byte integer values with endianness support
+ *
+ * Deserializes a multi-byte value from the circular buffer by reading bytes and reconstructing
+ * the value according to the specified endianness. Handles buffer wrap-around correctly by
+ * using the peek() method to copy bytes into a contiguous array before reconstruction.
+ *
+ * \param buffer Pointer to the CircularBuffer to deserialize from
+ * \param value Reference to store the deserialized value
+ * \param mode Endianness mode (BIG or LITTLE) for byte order interpretation
+ * \param availableSize Total size of available data in the buffer for deserialization
+ * \param deserIdx Reference to deserialization index (offset from buffer head); updated on success
+ * \return FW_SERIALIZE_OK on success, FW_DESERIALIZE_BUFFER_EMPTY if insufficient data available
+ */
 template<typename T>
 static inline Fw::SerializeStatus deserializeMultibyte(
     CircularBuffer* buffer,
