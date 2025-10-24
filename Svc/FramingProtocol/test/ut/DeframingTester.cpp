@@ -46,7 +46,7 @@ void DeframingTester ::serializeTokenType(FpFrameHeader::TokenType v) {
         FW_ASSERT(status == Fw::FW_SERIALIZE_OK);
     }
     {
-        const Fw::SerializeStatus status = this->circularBuffer.serialize(buffer, sizeof buffer);
+        const Fw::SerializeStatus status = this->circularBuffer.serializeFrom(buffer, sizeof buffer, Fw::Serialization::OMIT_LENGTH);
         FW_ASSERT(status == Fw::FW_SERIALIZE_OK);
     }
 }
@@ -87,7 +87,7 @@ Fw::ByteArray DeframingTester ::constructRandomFrame(U32 packetSize) {
 }
 
 void DeframingTester ::pushFrameOntoCB(Fw::ByteArray frame) {
-    const Fw::SerializeStatus status = this->circularBuffer.serialize(frame.bytes, frame.size);
+    const Fw::SerializeStatus status = this->circularBuffer.serializeFrom(frame.bytes, frame.size, Fw::Serialization::OMIT_LENGTH);
     FW_ASSERT(status == Fw::FW_SERIALIZE_OK);
 }
 

@@ -11,7 +11,7 @@ namespace FrameDetectors {
 
 FrameDetector::Status FprimeFrameDetector::detect(const Types::CircularBuffer& data, FwSizeType& size_out) const {
     // If not enough data for header + trailer, report MORE_DATA_NEEDED
-    if (data.get_allocated_size() <
+    if (data.getSize() <
         FprimeProtocol::FrameHeader::SERIALIZED_SIZE + FprimeProtocol::FrameTrailer::SERIALIZED_SIZE) {
         size_out = FprimeProtocol::FrameHeader::SERIALIZED_SIZE + FprimeProtocol::FrameTrailer::SERIALIZED_SIZE;
         return Status::MORE_DATA_NEEDED;
@@ -53,7 +53,7 @@ FrameDetector::Status FprimeFrameDetector::detect(const Types::CircularBuffer& d
     const FwSizeType expected_frame_size = FprimeProtocol::FrameHeader::SERIALIZED_SIZE + header.get_lengthField() +
                                            FprimeProtocol::FrameTrailer::SERIALIZED_SIZE;
     // If the current allocated size can't hold the expected_frame_size -> MORE_DATA_NEEDED
-    if (data.get_allocated_size() < expected_frame_size) {
+    if (data.getSize() < expected_frame_size) {
         size_out = expected_frame_size;
         return Status::MORE_DATA_NEEDED;
     }

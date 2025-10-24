@@ -38,6 +38,19 @@ If multiple threads use the buffer, the uses must
 be guarded by other concurrency control, e.g.,
 a queue or lock.
 
+### SerialBufferBase Interface
+
+`CircularBuffer` implements the `Fw::SerialBufferBase` interface,
+which provides standard F Prime serialization and deserialization operations.
+This allows `CircularBuffer` to be used interchangeably with other
+F Prime buffer types (e.g., `ExternalSerializeBuffer`) in generic code.
+
+The interface provides:
+- **Serialization methods**: `serializeFrom()` for primitive types (U8, U16, U32, U64, F32, F64, bool, etc.)
+- **Deserialization methods**: `deserializeTo()` for primitive types with automatic pointer advancement
+- **Buffer management**: `resetSer()`, `resetDeser()`, `getSize()`, `getDeserializeSizeLeft()`, etc.
+- **Copy operations**: `copyRaw()` and `copyRawOffset()` for efficient buffer-to-buffer copying
+
 The `CircularBuffer` type provides the following operations.
 
 ### Constructor
@@ -52,17 +65,22 @@ specified as a starting pointer and a size in bytes.
 ### Adding Data
 
 ```c++
-Fw::SerializeStatus serializeTo(const U8* const buffer, const FwSizeType size);
+Fw::SerializeStatus serializeFrom(const U8* buff, FwSizeType length, 
+                                  Fw::Serialization::t lengthMode = Fw::Serialization::INCLUDE_LENGTH,
+                                  Fw::Endianness endianMode = Fw::Endianness::BIG);
 ```
 
-If the current logical store size plus `size` exceeds
+If the current logical store size plus `length` exceeds
 the maximum logical store size, then return an error.
 Otherwise increase the logical store size by
-`size` bytes and copy `size` bytes starting at `buffer`
+`length` bytes and copy `length` bytes starting at `buff`
 into the new logical memory.
 
-The operation is called `serialize` following F Prime practice.
-No data is actually serialized (the data is copied byte for byte).
+If `lengthMode` is `INCLUDE_LENGTH`, the length is serialized first.
+If `lengthMode` is `OMIT_LENGTH`, only the raw bytes are copied.
+
+The operation is called `serializeFrom` following F Prime practice.
+When using `OMIT_LENGTH`, no data is actually serialized (the data is copied byte for byte).
 
 ### Reading Data
 
@@ -116,7 +134,7 @@ and set the logical store size to _s_ - `amount`.
 ### Querying Buffer State
 
 ```c++
-FwSizeType get_allocated_size() const;
+Fw::Serializable::SizeType getSize() const;
 ```
 
 Return the number of allocated bytes, i.e., the
@@ -124,8 +142,10 @@ current logical store size.
 This is the maximum number of bytes that may be read from
 the logical store without adding data.
 
+Note: `get_allocated_size()` is deprecated; use `getSize()` instead.
+
 ```c++
-FwSizeType get_free_size() const;
+Fw::Serializable::SizeType getSerializeSizeLeft() const;
 ```
 
 Return the number of free bytes, i.e., the
@@ -133,10 +153,141 @@ maximum logical store size minus the current logical store size.
 This is the number of bytes that may be added to the logical
 store without deleting data.
 
+Note: `get_free_size()` is deprecated; use `getSerializeSizeLeft()` instead.
+
 ```c++
-FwSizeType get_capacity() const;
+Fw::Serializable::SizeType getCapacity() const;
 ```
 
 Return the maximum logical store size (equal to the physical store size).
 This is the total number of bytes that may be added to an empty
 circular buffer.
+
+Note: `get_capacity()` is deprecated; use `getCapacity()` instead (no change in name, but return type updated).
+
+## SerialBufferBase Interface Methods
+
+The following methods are provided through the `Fw::SerialBufferBase` interface.
+
+### Serialization
+
+```c++
+Fw::SerializeStatus serializeFrom(T val, Fw::Endianness mode = Fw::Endianness::BIG);
+```
+
+Serialize a value of type `T` (where `T` can be U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, bool, or void*)
+into the circular buffer with the specified endianness.
+Returns `FW_SERIALIZE_OK` on success or `FW_SERIALIZE_NO_ROOM_LEFT` if insufficient space.
+
+```c++
+Fw::SerializeStatus serializeFrom(const U8* buff, FwSizeType length, 
+                                  Fw::Serialization::t lengthMode = Fw::Serialization::INCLUDE_LENGTH,
+                                  Fw::Endianness endianMode = Fw::Endianness::BIG);
+```
+
+Serialize a byte array into the circular buffer.
+If `lengthMode` is `INCLUDE_LENGTH`, the length is serialized first.
+Returns `FW_SERIALIZE_OK` on success or an error status.
+
+### Deserialization
+
+```c++
+Fw::SerializeStatus deserializeTo(T& val, Fw::Endianness mode = Fw::Endianness::BIG);
+```
+
+Deserialize a value of type `T` from the circular buffer.
+Automatically advances the internal deserialization pointer.
+Returns `FW_SERIALIZE_OK` on success or `FW_DESERIALIZE_BUFFER_EMPTY` if insufficient data.
+
+```c++
+Fw::SerializeStatus deserializeTo(U8* buff, FwSizeType& length,
+                                  Fw::Serialization::t lengthMode = Fw::Serialization::INCLUDE_LENGTH,
+                                  Fw::Endianness endianMode = Fw::Endianness::BIG);
+```
+
+Deserialize a byte array from the circular buffer.
+If `lengthMode` is `INCLUDE_LENGTH`, the length is deserialized first.
+Advances the internal deserialization pointer.
+
+### Buffer Copying
+
+```c++
+Fw::SerializeStatus copyRaw(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size);
+```
+
+Copy `size` bytes from the circular buffer (starting at the current deserialization pointer) 
+to the destination buffer, **replacing** the destination buffer's contents.
+Advances the circular buffer's deserialization pointer by `size` bytes.
+Handles wrap-around in the circular buffer automatically.
+
+Returns:
+- `FW_SERIALIZE_OK` on success
+- `FW_DESERIALIZE_BUFFER_EMPTY` if insufficient data in source (less than `size` bytes from deserialization pointer)
+- `FW_SERIALIZE_NO_ROOM_LEFT` if insufficient capacity in destination
+
+```c++
+Fw::SerializeStatus copyRawOffset(Fw::SerialBufferBase& dest, Fw::Serializable::SizeType size);
+```
+
+Copy `size` bytes from the circular buffer (starting at the current deserialization pointer) 
+to the destination buffer, **appending** to the destination buffer's existing contents.
+Advances the circular buffer's deserialization pointer by `size` bytes.
+Handles wrap-around in the circular buffer automatically.
+
+Returns:
+- `FW_SERIALIZE_OK` on success
+- `FW_DESERIALIZE_BUFFER_EMPTY` if insufficient data in source (less than `size` bytes from deserialization pointer)
+- `FW_SERIALIZE_NO_ROOM_LEFT` if insufficient space in destination (capacity - current size < size)
+
+**Key Difference**: `copyRaw` replaces destination contents; `copyRawOffset` appends to destination.
+
+### Buffer Management
+
+```c++
+void resetSer();
+```
+
+Reset the circular buffer, clearing all data and resetting both
+serialization and deserialization pointers to the beginning.
+
+```c++
+void resetDeser();
+```
+
+Reset the deserialization pointer to the beginning of the buffer
+without clearing the data. Allows re-reading the buffer contents.
+
+```c++
+Fw::SerializeStatus moveDeserToOffset(FwSizeType offset);
+```
+
+Move the deserialization pointer to a specific offset within the buffer.
+Returns `FW_DESERIALIZE_BUFFER_EMPTY` if offset exceeds buffer size.
+
+```c++
+Fw::SerializeStatus deserializeSkip(FwSizeType numBytesToSkip);
+```
+
+Skip `numBytesToSkip` bytes in the deserialization stream without reading them.
+Advances the deserialization pointer.
+Returns `FW_DESERIALIZE_BUFFER_EMPTY` if skipping past end of buffer.
+
+```c++
+Fw::Serializable::SizeType getSize() const;
+```
+
+Return the current size of data in the buffer (equivalent to `get_allocated_size()`).
+
+```c++
+Fw::Serializable::SizeType getDeserializeSizeLeft() const;
+```
+
+Return the number of bytes remaining to be deserialized
+(i.e., from the current deserialization pointer to the end of data).
+
+```c++
+Fw::Serializable::SizeType getSerializeSizeLeft() const;
+```
+
+Return the number of bytes available for serialization
+(equivalent to `get_free_size()`).

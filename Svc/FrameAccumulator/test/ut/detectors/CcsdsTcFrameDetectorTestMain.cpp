@@ -57,8 +57,8 @@ FwSizeType generate_random_tc_frame(Types::CircularBuffer& circular_buffer) {
     tcHeader.serializeTo(header_ser_buffer);
 
     // Serialize header and packet data into the circular buffer
-    circular_buffer.serialize(frame_header, TCHeader::SERIALIZED_SIZE);
-    circular_buffer.serialize(packet_data, packet_size);
+    circular_buffer.serializeFrom(frame_header, TCHeader::SERIALIZED_SIZE, Fw::Serialization::OMIT_LENGTH);
+    circular_buffer.serializeFrom(packet_data, packet_size, Fw::Serialization::OMIT_LENGTH);
 
     U8 frame_trailer[TCTrailer::SERIALIZED_SIZE];
     Fw::ExternalSerializeBuffer trailer_ser_buffer(frame_trailer, TCTrailer::SERIALIZED_SIZE);
@@ -74,7 +74,7 @@ FwSizeType generate_random_tc_frame(Types::CircularBuffer& circular_buffer) {
     tcTrailer.set_fecf(crc.finalize());
     tcTrailer.serializeTo(trailer_ser_buffer);
     // Serialize trailer into the circular buffer
-    circular_buffer.serialize(frame_trailer, TCTrailer::SERIALIZED_SIZE);
+    circular_buffer.serializeFrom(frame_trailer, TCTrailer::SERIALIZED_SIZE, Fw::Serialization::OMIT_LENGTH);
     return total_frame_size;
 }
 
@@ -82,7 +82,7 @@ TEST_F(CcsdsFrameDetectorTest, TestBufferTooSmall) {
     // Anything smaller than the size of header + trailer is invalid
     U32 minimum_valid_size = TCHeader::SERIALIZED_SIZE + TCTrailer::SERIALIZED_SIZE;
     U32 invalid_size = STest::Random::lowerUpper(1, minimum_valid_size - 1);
-    this->circular_buffer.serialize(this->m_buffer, invalid_size);
+    this->circular_buffer.serializeFrom(this->m_buffer, invalid_size, Fw::Serialization::OMIT_LENGTH);
 
     Svc::FrameDetector::Status status;
     FwSizeType size_out = 0;

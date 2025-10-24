@@ -83,7 +83,7 @@ DeframingProtocol::DeframingStatus FprimeDeframing::deframe(Types::CircularBuffe
     FpFrameHeader::TokenType size = 0;
     FW_ASSERT(m_interface != nullptr);
     // Check for header or ask for more data
-    if (ring.get_allocated_size() < FpFrameHeader::SIZE) {
+    if (ring.getSize() < FpFrameHeader::SIZE) {
         needed = FpFrameHeader::SIZE;
         return DeframingProtocol::DEFRAMING_MORE_NEEDED;
     }
@@ -105,13 +105,13 @@ DeframingProtocol::DeframingStatus FprimeDeframing::deframe(Types::CircularBuffe
     needed = (FpFrameHeader::SIZE + size + HASH_DIGEST_LENGTH);
     // Check frame size
     const U32 frameSize = size + FpFrameHeader::SIZE + HASH_DIGEST_LENGTH;
-    if (frameSize > ring.get_capacity()) {
+    if (frameSize > ring.getCapacity()) {
         // Frame size is too large for ring buffer
         return DeframingProtocol::DEFRAMING_INVALID_SIZE;
     }
     // Check for enough data to deserialize everything;
     // otherwise break and wait for more.
-    else if (ring.get_allocated_size() < needed) {
+    else if (ring.getSize() < needed) {
         return DeframingProtocol::DEFRAMING_MORE_NEEDED;
     }
     // Check the checksum
