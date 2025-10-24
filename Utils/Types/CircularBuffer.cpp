@@ -396,12 +396,9 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(U16& val, Fw::Endianness mode)
 }
 
 Fw::SerializeStatus CircularBuffer::deserializeTo(I16& val, Fw::Endianness mode) {
-    U16 temp;
-    Fw::SerializeStatus status = deserializeTo(temp, mode);
-    if (status == Fw::FW_SERIALIZE_OK) {
-        val = static_cast<I16>(temp);
-    }
-    return status;
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
+    FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
+    return deserializeMultibyte<I16>(this, val, mode, m_allocated_size, m_deser_idx);
 }
 #endif
 
@@ -413,12 +410,9 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(U32& val, Fw::Endianness mode)
 }
 
 Fw::SerializeStatus CircularBuffer::deserializeTo(I32& val, Fw::Endianness mode) {
-    U32 temp;
-    Fw::SerializeStatus status = deserializeTo(temp, mode);
-    if (status == Fw::FW_SERIALIZE_OK) {
-        val = static_cast<I32>(temp);
-    }
-    return status;
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
+    FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
+    return deserializeMultibyte<I32>(this, val, mode, m_allocated_size, m_deser_idx);
 }
 #endif
 
@@ -430,12 +424,9 @@ Fw::SerializeStatus CircularBuffer::deserializeTo(U64& val, Fw::Endianness mode)
 }
 
 Fw::SerializeStatus CircularBuffer::deserializeTo(I64& val, Fw::Endianness mode) {
-    U64 temp;
-    Fw::SerializeStatus status = deserializeTo(temp, mode);
-    if (status == Fw::FW_SERIALIZE_OK) {
-        val = static_cast<I64>(temp);
-    }
-    return status;
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
+    FW_ASSERT(m_deser_idx <= m_allocated_size, static_cast<FwAssertArgType>(m_deser_idx), static_cast<FwAssertArgType>(m_allocated_size));
+    return deserializeMultibyte<I64>(this, val, mode, m_allocated_size, m_deser_idx);
 }
 #endif
 
