@@ -27,7 +27,9 @@ QueuedTestTester ::QueuedTestTester()
     this->component.registerExternalParameters(&this->paramTesterDelegate);
 }
 
-QueuedTestTester ::~QueuedTestTester() {}
+QueuedTestTester ::~QueuedTestTester() {
+    this->component.deinit();
+}
 
 void QueuedTestTester ::initComponents() {
     this->init();
@@ -130,7 +132,7 @@ Fw::SerializeStatus QueuedTestTester::QueuedTestComponentBaseParamExternalDelega
     const FwPrmIdType base_id,
     const FwPrmIdType local_id,
     const Fw::ParamValid prmStat,
-    Fw::SerializeBufferBase& buff) {
+    Fw::SerialBufferBase& buff) {
     Fw::SerializeStatus stat;
     (void)base_id;
 
@@ -171,7 +173,7 @@ Fw::SerializeStatus QueuedTestTester::QueuedTestComponentBaseParamExternalDelega
 Fw::SerializeStatus QueuedTestTester::QueuedTestComponentBaseParamExternalDelegate ::serializeParam(
     const FwPrmIdType base_id,
     const FwPrmIdType local_id,
-    Fw::SerializeBufferBase& buff) const {
+    Fw::SerialBufferBase& buff) const {
     Fw::SerializeStatus stat;
     (void)base_id;
 

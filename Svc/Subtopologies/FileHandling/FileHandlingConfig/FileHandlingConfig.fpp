@@ -17,15 +17,14 @@ module FileHandlingConfig {
     }
 
     module Priorities {
-        constant fileUplink    = 101
-        constant fileDownlink  = 100
-        constant fileManager   = 99
-        constant prmDb         = 98
+        constant fileUplink    = 24
+        constant fileDownlink  = 23
+        constant fileManager   = 22
+        constant prmDb         = 21
     }
 
     # File downlink configuration constants
     module DownlinkConfig {
-        constant timeout        = 1000         # File downlink timeout in ms
         constant cooldown       = 1000         # File downlink cooldown in ms  
         constant cycleTime      = 1000         # File downlink cycle time in ms
         constant fileQueueDepth = 10           # File downlink queue depth

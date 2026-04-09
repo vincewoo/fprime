@@ -50,9 +50,12 @@ void TcDeframer ::dataIn_handler(FwIndexType portNum, Fw::Buffer& data, const Co
 
     // CCSDS TC Trailer:
     // 16b - Frame Error Control Field (FECF): CRC16
-
-    FW_ASSERT(data.getSize() > TCHeader::SERIALIZED_SIZE + TCTrailer::SERIALIZED_SIZE,
-              static_cast<FwAssertArgType>(data.getSize()));
+    if (data.getSize() <= TCHeader::SERIALIZED_SIZE + TCTrailer::SERIALIZED_SIZE) {
+        // Incoming buffer is not long enough to contain a valid frame (header+trailer)
+        this->log_WARNING_LO_InvalidPacket();
+        this->dataReturnOut_out(0, data, context);
+        return;
+    }
 
     TCHeader header;
     Fw::SerializeStatus status = data.getDeserializer().deserializeTo(header);
@@ -68,7 +71,10 @@ void TcDeframer ::dataIn_handler(FwIndexType portNum, Fw::Buffer& data, const Co
         this->dataReturnOut_out(0, data, context);  // drop the frame
         return;
     }
-    if (data.getSize() < static_cast<Fw::Buffer::SizeType>(total_frame_length)) {
+    // check that deserialized frame_length is at least large enough to hold header and trailer, and
+    // that it is not larger than the actual data available in the buffer
+    if ((data.getSize() < static_cast<Fw::Buffer::SizeType>(total_frame_length)) or
+        (total_frame_length < TCHeader::SERIALIZED_SIZE + TCTrailer::SERIALIZED_SIZE)) {
         FwSizeType maxDataAvailable = static_cast<FwSizeType>(data.getSize());
         this->log_WARNING_HI_InvalidFrameLength(total_frame_length, maxDataAvailable);
         this->errorNotifyHelper(Ccsds::FrameError::TC_INVALID_LENGTH);

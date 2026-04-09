@@ -23,7 +23,9 @@ BasicGuardTestAbsTypeTester::BasicGuardTestAbsTypeTester(const char* const compN
       m_smStateBasicGuardTestAbsType_action_a_history(),
       m_smStateBasicGuardTestAbsType_guard_g() {}
 
-BasicGuardTestAbsTypeTester::~BasicGuardTestAbsTypeTester() {}
+BasicGuardTestAbsTypeTester::~BasicGuardTestAbsTypeTester() {
+    this->deinit();
+}
 
 // ----------------------------------------------------------------------
 // Implementations for internal state machine actions
@@ -53,10 +55,9 @@ bool BasicGuardTestAbsTypeTester::FppTest_SmState_BasicGuardTestAbsType_guard_g(
 // Overflow hook implementations for internal state machines
 // ----------------------------------------------------------------------
 
-void BasicGuardTestAbsTypeTester::smStateBasicGuardTestAbsType_stateMachineOverflowHook(
-    SmId smId,
-    FwEnumStoreType signal,
-    Fw::SerializeBufferBase& buffer) {
+void BasicGuardTestAbsTypeTester::smStateBasicGuardTestAbsType_stateMachineOverflowHook(SmId smId,
+                                                                                        FwEnumStoreType signal,
+                                                                                        Fw::SerialBufferBase& buffer) {
     this->m_hookCalled = true;
     ASSERT_EQ(smId, SmId::smStateBasicGuardTestAbsType);
     ASSERT_EQ(static_cast<SmState_BasicGuardTestAbsType::Signal>(signal), SmState_BasicGuardTestAbsType::Signal::s);

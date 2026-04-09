@@ -221,6 +221,7 @@ Rancher Desktop is an alternative to Docker Desktop that allows users to run doc
 > Non-Macintosh users are advised to run without the below Docker container
 
 To install [Rancher Desktop](https://rancherdesktop.io/), follow the instructions for your operating system. When presented with a "Welcome to Rancher Desktop" dialog, choose the following settings:
+
 1. Disable Kubernetes
 2. Select `dockerd`
 3. Configure PATH Automatic
@@ -241,7 +242,7 @@ docker pull nasafprime/fprime-arm:latest
 
 In order to run the commands provided by the docker container (i.e. the cross-compilers), users must start the container and attach to a terminal inside. This should be done **after** the user has created a project to work within.
 
-To run this container, users may wish to download [this script](https://github.com/fprime-community/fprime-workshop-led-blinker/blob/main/bin/macos-docker) to a `bin` directory in the root of their project. This will start the docker container with appropriate settings. 
+To run this container, users may wish to download [this script](https://github.com/fprime-community/fprime-workshop-led-blinker/blob/devel/bin/macos-docker) to a `bin` directory in the root of their project. This will start the docker container with appropriate settings. 
 
 Alternatively, the user may run the following command to start the terminal
 ```bash 

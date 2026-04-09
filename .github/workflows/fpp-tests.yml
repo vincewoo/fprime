@@ -33,7 +33,7 @@ jobs:
       - name: "Generate UT build cache"
         working-directory: ./FppTestProject
         run: |
-          fprime-util generate --ut
+          fprime-util generate --ut -DFPRIME_ENABLE_JSON_MODEL_GENERATION=ON
         shell: bash
       - name: "Build UTs"
         working-directory: ./FppTestProject/FppTest
@@ -43,7 +43,7 @@ jobs:
       - name: "Run UTs"
         working-directory: ./FppTestProject/FppTest
         run: |
-          fprime-util check
+          fprime-util check --pass-through --output-on-failure
         shell: bash
       - name: "Archive Logs"
         uses: actions/upload-artifact@v4

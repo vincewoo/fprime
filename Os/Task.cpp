@@ -7,7 +7,7 @@
 
 namespace Os {
 
-TaskInterface::Arguments::Arguments(const Fw::StringBase& name,
+TaskInterface::Arguments::Arguments(const Fw::ConstStringBase& name,
                                     const Os::TaskInterface::taskRoutine routine,
                                     void* const routine_argument,
                                     const FwTaskPriorityType priority,
@@ -81,7 +81,7 @@ Task::State Task::getState() {
     return state;
 }
 
-Task::Status Task::start(const Fw::StringBase& name,
+Task::Status Task::start(const Fw::ConstStringBase& name,
                          const taskRoutine routine,
                          void* const arg,
                          const FwTaskPriorityType priority,
@@ -174,6 +174,11 @@ bool Task::isCooperative() {
     return this->m_delegate.isCooperative();
 }
 
+TaskString Task::getName() {
+    Os::ScopeLock lock(this->m_lock);
+    return this->m_name;
+}
+
 FwTaskPriorityType Task::getPriority() {
     Os::ScopeLock lock(this->m_lock);
     return this->m_priority;
@@ -191,12 +196,12 @@ FwSizeType Task::getNumTasks() {
     return num_tasks;
 }
 
-Os::TaskInterface::Status Task::_delay(Fw::TimeInterval interval) {
+Os::TaskInterface::Status Task::_delay(const Fw::TimeInterval& interval) {
     FW_ASSERT(&this->m_delegate == reinterpret_cast<TaskInterface*>(&this->m_handle_storage[0]));
     return this->m_delegate._delay(interval);
 }
 
-Os::TaskInterface::Status Task::delay(Fw::TimeInterval interval) {
+Os::TaskInterface::Status Task::delay(const Fw::TimeInterval& interval) {
     return Task::getSingleton()._delay(interval);
 }
 

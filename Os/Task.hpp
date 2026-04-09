@@ -34,12 +34,23 @@ class TaskHandle {};
 
 class TaskInterface {
   public:
+    //! Sentinel value to use a default value for the task argument to which this is supplied.
+    //!
+    //! Implementations of TaskInterface::start() should make a special case to use some default value that is
+    //! valid for the target platform.
     static constexpr FwSizeType TASK_DEFAULT = std::numeric_limits<FwSizeType>::max();
+
+    //! Sentinel value to use a default priority for the task.
+    //!
+    //! Implementations of TaskInterface::start() should make a special case to use some default task priority
+    //! that is valid for the target platform.
     static constexpr FwTaskPriorityType TASK_PRIORITY_DEFAULT = std::numeric_limits<FwTaskPriorityType>::max();
+
     enum Status {
         OP_OK,             //!< message sent/received okay
         INVALID_HANDLE,    //!< Task handle invalid
         INVALID_PARAMS,    //!< started task with invalid parameters
+        INVALID_PRIORITY,  //!< started task with invalid priority
         INVALID_STACK,     //!< started with invalid stack size
         UNKNOWN_ERROR,     //!< unexpected error return value
         INVALID_AFFINITY,  //!< unable to set the task affinity
@@ -72,7 +83,7 @@ class TaskInterface {
         //! \param stackSize: (optional) size of stack supplied to this task
         //! \param cpuAffinity: (optional) cpu affinity of this task. TODO: fix this into an array
         //! \param identifier: (optional) identifier for this task
-        Arguments(const Fw::StringBase& name,
+        Arguments(const Fw::ConstStringBase& name,
                   const taskRoutine routine,
                   void* const routine_argument = nullptr,
                   const FwTaskPriorityType priority = TASK_PRIORITY_DEFAULT,
@@ -164,7 +175,7 @@ class TaskInterface {
     //!
     //! \param interval: delay time
     //! \return status of the delay
-    virtual Status _delay(Fw::TimeInterval interval) = 0;
+    virtual Status _delay(const Fw::TimeInterval& interval) = 0;
 
     //! \brief determine if the task requires cooperative multitasking
     //!
@@ -261,7 +272,7 @@ class Task final : public TaskInterface {
     //! \param cpuAffinity: (optional) affinity of this task. Use `Task::start(Arguments&)` to supply affinity set.
     //! \param identifier: (optional) identifier of this task
     //! \return: status of the start call
-    DEPRECATED(Status start(const Fw::StringBase& name,
+    DEPRECATED(Status start(const Fw::ConstStringBase& name,
                             const taskRoutine routine,
                             void* const arg = nullptr,
                             const FwTaskPriorityType priority = TASK_PRIORITY_DEFAULT,
@@ -330,11 +341,14 @@ class Task final : public TaskInterface {
     //!
     //! \param interval: delay time
     //! \return status of the delay
-    Status _delay(Fw::TimeInterval interval) override;
+    Status _delay(const Fw::TimeInterval& interval) override;
 
     //! \brief determine if the task is cooperative multitasking (implementation specific)
     //! \return true if cooperative, false otherwise
     bool isCooperative() override;
+
+    //! \brief get the task name
+    TaskString getName();
 
     //! \brief get the task priority
     FwTaskPriorityType getPriority();
@@ -365,7 +379,7 @@ class Task final : public TaskInterface {
     //!
     //! \param interval: delay time
     //! \return status of the delay
-    static Status delay(Fw::TimeInterval interval);
+    static Status delay(const Fw::TimeInterval& interval);
 
   private:
     static TaskRegistry* s_taskRegistry;  //!< Pointer to registered task registry

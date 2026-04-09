@@ -87,7 +87,11 @@ inline FwSizeType CircularBuffer::advance_idx(FwSizeType idx, FwSizeType amount)
 }
 
 inline Fw::SerializeStatus CircularBuffer::checkSerializeSpace(const FwSizeType size) const {
-    // Check if the serialization would exceed the buffer capacity
+    // Check that writing 'size' bytes at m_ser_idx doesn't exceed capacity.
+    // m_ser_idx is the current write cursor (offset from head).
+    // Free space = m_store_size - m_allocated_size.
+    // Writing new data beyond current end requires free space.
+    // Overwriting within existing allocation is always OK if it fits in store.
     FwSizeType end_offset = m_ser_idx + size;
     if (end_offset > m_store_size) {
         return Fw::FW_SERIALIZE_NO_ROOM_LEFT;
@@ -202,9 +206,8 @@ Fw::SerializeStatus CircularBuffer::rotate(FwSizeType amount) {
     }
     m_head_idx = advance_idx(m_head_idx, amount);
     m_allocated_size -= amount;
-    // Adjust serialization index: if it's beyond the rotated amount, subtract the rotation
-    // Otherwise, it's in the rotated-away region, so reset to 0
-    m_ser_idx = (m_ser_idx >= amount) ? (m_ser_idx - amount) : 0;
+    // After rotate, the write cursor points to the new end of allocated data
+    m_ser_idx = m_allocated_size;
     // Adjust deserialization index: if it's beyond the rotated amount, subtract the rotation
     // Otherwise, it's in the rotated-away region, so reset to 0
     m_deser_idx = (m_deser_idx >= amount) ? (m_deser_idx - amount) : 0;
@@ -325,7 +328,7 @@ Fw::SerializeStatus CircularBuffer::serializeFrom(F64 val, Fw::Endianness mode) 
 
 Fw::SerializeStatus CircularBuffer::serializeFrom(bool val, Fw::Endianness mode) {
     FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
-    U8 byte = val ? FW_SERIALIZE_TRUE_VALUE : FW_SERIALIZE_FALSE_VALUE;
+    U8 byte = val ? static_cast<U8>(FW_SERIALIZE_TRUE_VALUE) : static_cast<U8>(FW_SERIALIZE_FALSE_VALUE);
     // Single byte - endianness doesn't apply
     return this->serializeRaw(&byte, sizeof(byte));
 }
@@ -681,6 +684,21 @@ Fw::SerializeStatus CircularBuffer::deserializeSkip(FwSizeType numBytesToSkip) {
         return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
     }
     m_deser_idx += numBytesToSkip;
+    return Fw::FW_SERIALIZE_OK;
+}
+
+Fw::SerializeStatus CircularBuffer::trim(FwSizeType amount) {
+    FW_ASSERT(m_store != nullptr && m_store_size != 0);  // setup method was called
+    // Check there is sufficient data
+    if (amount > m_allocated_size) {
+        return Fw::FW_DESERIALIZE_BUFFER_EMPTY;
+    }
+    // Simply reduce the allocated size without moving the head
+    m_allocated_size -= amount;
+    // Keep write cursor in sync with allocated size
+    if (m_ser_idx > m_allocated_size) {
+        m_ser_idx = m_allocated_size;
+    }
     return Fw::FW_SERIALIZE_OK;
 }
 

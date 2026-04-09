@@ -8,13 +8,13 @@ module Svc {
     # ----------------------------------------------------------------------
 
     @ Parameter DB type
-    enum PrmDbType {
+    enum PrmDbType : U8 {
       DB_ACTIVE,
       DB_STAGING
     }
 
     @ State of parameter DB file load operations
-    enum PrmDbFileLoadState {
+    enum PrmDbFileLoadState : U8 {
         IDLE,
         LOADING_FILE_UPDATES,
         FILE_UPDATES_STAGED,
@@ -22,7 +22,7 @@ module Svc {
 
 
     @ Parameter read error
-    enum PrmReadError {
+    enum PrmReadError : U8 {
       OPEN
       DELIMITER
       DELIMITER_SIZE
@@ -34,10 +34,14 @@ module Svc {
       PARAMETER_ID_SIZE
       PARAMETER_VALUE
       PARAMETER_VALUE_SIZE
+      CRC
+      CRC_SIZE
+      CRC_BUFFER
+      SEEK_ZERO
     }
 
     @ Parameter write error
-    enum PrmWriteError {
+    enum PrmWriteError : U8 {
       OPEN
       DELIMITER
       DELIMITER_SIZE
@@ -47,6 +51,11 @@ module Svc {
       PARAMETER_ID_SIZE
       PARAMETER_VALUE
       PARAMETER_VALUE_SIZE
+      CRC_PLACE
+      CRC_REAL
+      CURR_POSITION
+      SEEK_ZERO
+      SEEK_POSITION
     }
 
     # ----------------------------------------------------------------------

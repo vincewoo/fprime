@@ -6,11 +6,17 @@
 register_fprime_config(
     AUTOCODER_INPUTS
         "${CMAKE_CURRENT_LIST_DIR}/AcConstants.fpp"
-        "${CMAKE_CURRENT_LIST_DIR}/DpCfg.fpp"
         "${CMAKE_CURRENT_LIST_DIR}/ComCfg.fpp"
+        "${CMAKE_CURRENT_LIST_DIR}/DpCfg.fpp"
+        "${CMAKE_CURRENT_LIST_DIR}/FileDispatcherCfg.fpp"
         "${CMAKE_CURRENT_LIST_DIR}/FpConfig.fpp"
+        "${CMAKE_CURRENT_LIST_DIR}/FpConstants.fpp"
         "${CMAKE_CURRENT_LIST_DIR}/FpySequencerCfg.fpp"
+        "${CMAKE_CURRENT_LIST_DIR}/GenericHubCfg.fpp"
         "${CMAKE_CURRENT_LIST_DIR}/MemoryAllocation.fpp"
+        "${CMAKE_CURRENT_LIST_DIR}/MemoryAllocation.hpp"
+        "${CMAKE_CURRENT_LIST_DIR}/OsCfg.fpp"
+        "${CMAKE_CURRENT_LIST_DIR}/PlatformCfg.fpp"
         "${CMAKE_CURRENT_LIST_DIR}/PolyDbCfg.fpp"
         "${CMAKE_CURRENT_LIST_DIR}/VersionCfg.fpp"
     HEADERS
@@ -31,7 +37,6 @@ register_fprime_config(
         "${CMAKE_CURRENT_LIST_DIR}/PrmDbImplTesterCfg.hpp"
         "${CMAKE_CURRENT_LIST_DIR}/StaticMemoryConfig.hpp"
         "${CMAKE_CURRENT_LIST_DIR}/TlmChanImplCfg.hpp"
-        "${CMAKE_CURRENT_LIST_DIR}/TlmPacketizerCfg.hpp"
         "${CMAKE_CURRENT_LIST_DIR}/CRCCheckerConfig.hpp"
         "${CMAKE_CURRENT_LIST_DIR}/FileManagerConfig.hpp"
     BASE_CONFIG

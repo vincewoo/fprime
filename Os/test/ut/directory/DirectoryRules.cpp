@@ -4,6 +4,7 @@
 // ======================================================================
 
 #include "DirectoryRules.hpp"
+#include <algorithm>
 #include <string>
 #include "RulesHeaders.hpp"
 #include "STest/Pick/Pick.hpp"
@@ -184,8 +185,8 @@ bool Os::Test::Directory::Tester::ReadAllFiles::precondition(const Os::Test::Dir
 
 void Os::Test::Directory::Tester::ReadAllFiles::action(Os::Test::Directory::Tester& state) {
     ASSERT_TRUE(state.m_directory.isOpen());
-    const FwSizeType arraySize =
-        FW_MAX(state.m_filenames.size(), 1);  // .size() can be 0 during testing so ensure at least 1
+    // size can be 0 during testing so ensure at least 1
+    const FwSizeType arraySize = std::max<FwSizeType>(state.m_filenames.size(), 1);
     Fw::String outArray[arraySize];
     FwSizeType outFileCount = 0;
     Os::Directory::Status status = state.m_directory.readDirectory(outArray, arraySize, outFileCount);
@@ -193,7 +194,8 @@ void Os::Test::Directory::Tester::ReadAllFiles::action(Os::Test::Directory::Test
     // Number of files read should be the number of files in the directory minus the original seek position
     ASSERT_EQ(outFileCount, state.m_filenames.size());
     for (FwSizeType i = 0; i < outFileCount; i++) {
-        ASSERT_TRUE(state.is_valid_filename(std::string(outArray[i].toChar())));
+        ASSERT_TRUE(
+            state.is_valid_filename(std::string(outArray[i].toChar())));  // NOLINT(clang-analyzer-security.ArrayBound)
     }
     // readDirectory resets the seek position to the end
     state.m_seek_position = 0;

@@ -1,5 +1,6 @@
 #include <Fw/FPrimeBasicTypes.hpp>
 #include <Fw/Types/Assert.hpp>
+#include <Fw/Types/ConstExternalString.hpp>
 #include <Fw/Types/ExternalString.hpp>
 #include <Fw/Types/InternalInterfaceString.hpp>
 #include <Fw/Types/MallocAllocator.hpp>
@@ -1447,6 +1448,43 @@ TEST(TypesTest, ObjectNameTest) {
     ASSERT_EQ(es2, "ExternalString");
 }
 
+TEST(TypesTest, ConstExternalStringTest) {
+    // Un-initialized string
+    Fw::ConstExternalString strUninit;
+    ASSERT_EQ(strUninit.toChar(), nullptr);
+    ASSERT_EQ(strUninit.getCapacity(), 0);
+    ASSERT_EQ(strUninit.length(), 0);
+    ASSERT_EQ(strUninit.length(), strUninit.maxLength());
+
+    // Empty string
+    const char* strLiteralEmpty = "";  // capacity 1
+    Fw::ConstExternalString strEmpty(strLiteralEmpty, 1);
+    ASSERT_EQ(strEmpty.toChar(), strLiteralEmpty);
+    ASSERT_EQ(strEmpty.getCapacity(), 1);
+    ASSERT_EQ(strEmpty.length(), 0);
+    ASSERT_EQ(strEmpty.length(), strEmpty.maxLength());
+    ASSERT_TRUE(strEmpty == "");
+    ASSERT_TRUE(strEmpty != strUninit);
+
+    // Basic non-empty string
+    const char* stLiteralFoo = "foo";  // capacity 4
+    Fw::ConstExternalString strFoo(stLiteralFoo, 4);
+    ASSERT_EQ(strFoo.toChar(), stLiteralFoo);
+    ASSERT_EQ(strFoo.getCapacity(), 4);
+    ASSERT_EQ(strFoo.length(), 3);
+    ASSERT_EQ(strFoo.length(), strFoo.maxLength());
+    ASSERT_TRUE(strFoo == "foo");
+
+    std::cout << "Stream: " << strFoo << std::endl;
+
+    // Equality with non-const string type
+    Fw::ConstExternalString a("bar", 4);
+    Fw::String b("bar");
+    Fw::String c("foo");
+    ASSERT_TRUE(a == b);
+    ASSERT_TRUE(a != c);
+}
+
 TEST(TypesTest, StringFormatTest) {
     Fw::String str;
     str.format("Int %d String %s", 10, "foo");
@@ -1550,6 +1588,62 @@ TEST(AllocatorTest, MallocAllocatorTest) {
     allocator.deallocate(100, ptr);
 }
 
+TEST(AllocatorTest, MallocAllocatorTestNoRecoverable) {
+    // Since it is a wrapper around malloc, the test consists of requesting
+    // memory and verifying a non-zero pointer, unchanged size, and not recoverable.
+    Fw::MallocAllocator allocator;
+    Fw::MemAllocator& memAllocator = allocator;
+    FwSizeType size = 100;  // one hundred bytes
+    void* ptr = memAllocator.allocate(10, size);
+    ASSERT_EQ(100, size);
+    ASSERT_NE(ptr, nullptr);
+    // deallocate memory
+    allocator.deallocate(100, ptr);
+}
+
+TEST(AllocatorTest, MallocCheckedAllocate) {
+    // Since it is a wrapper around malloc, the test consists of requesting
+    // memory and verifying a non-zero pointer, unchanged size, and not recoverable.
+    Fw::MallocAllocator allocator;
+    FwSizeType size = 100;  // one hundred bytes
+    bool recoverable;
+    void* ptr = allocator.checkedAllocate(10, size, recoverable);
+    ASSERT_EQ(100, size);
+    ASSERT_NE(ptr, nullptr);
+    ASSERT_FALSE(recoverable);
+    // deallocate memory
+    allocator.deallocate(100, ptr);
+}
+
+TEST(AllocatorTest, MallocCheckedAllocateNoRecoverable) {
+    // Since it is a wrapper around malloc, the test consists of requesting
+    // memory and verifying a non-zero pointer, unchanged size, and not recoverable.
+    Fw::MallocAllocator allocator;
+    FwSizeType size = 100;  // one hundred bytes
+    void* ptr = allocator.checkedAllocate(10, size);
+    ASSERT_EQ(100, size);
+    ASSERT_NE(ptr, nullptr);
+    // deallocate memory
+    allocator.deallocate(100, ptr);
+}
+
+TEST(AllocatorTest, MallocCheckedAllocateTrapped) {
+    // Since it is a wrapper around malloc, the test consists of requesting
+    // memory and verifying a non-zero pointer, unchanged size, and not recoverable.
+    Fw::MallocAllocator allocator;
+    bool recoverable;
+    FwSizeType size = std::numeric_limits<FwSizeType>::max();  // Impossible number of bytes
+    ASSERT_DEATH(allocator.checkedAllocate(10, size, recoverable), ".*");
+}
+
+TEST(AllocatorTest, MallocCheckedAllocateNoRecoverableTrapped) {
+    // Since it is a wrapper around malloc, the test consists of requesting
+    // memory and verifying a non-zero pointer, unchanged size, and not recoverable.
+    Fw::MallocAllocator allocator;
+    FwSizeType size = std::numeric_limits<FwSizeType>::max();  // Impossible number of bytes
+    ASSERT_DEATH(allocator.checkedAllocate(10, size), ".*");
+}
+
 TEST(Nominal, string_copy) {
     const char* copy_string = "abc123\n";  // Length of 7
     char buffer_out_test[10];
@@ -1637,6 +1731,12 @@ TEST(Nominal, sub_string_match_partway_1) {
     ASSERT_EQ(Fw::StringUtils::substring_find(source_string, 6, sub_string, 3), 2);
 }
 
+TEST(Nominal, sub_string_match_partway_first) {
+    const char* source_string = "abc123c123";
+    const char* sub_string = "c12";
+    ASSERT_EQ(Fw::StringUtils::substring_find(source_string, 10, sub_string, 3), 2);
+}
+
 TEST(OffNominal, sub_string_partial_match_begin) {
     const char* source_string = "abc123";
     const char* sub_string = "ab1";
@@ -1671,6 +1771,72 @@ TEST(OffNominal, sub_string_substring_zero_size) {
     const char* source_string = "abc123";
     const char* sub_string = "";
     ASSERT_EQ(Fw::StringUtils::substring_find(source_string, 6, sub_string, 0), 0);
+}
+
+TEST(OffNominal, sub_string_last_no_match) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "456";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), -1);
+}
+
+TEST(Nominal, sub_string_last_match_begin) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "abc";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), 0);
+}
+
+TEST(Nominal, sub_string_last_match_end) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "123";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), 3);
+}
+
+TEST(Nominal, sub_string_last_match_partway_1) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "c12";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), 2);
+}
+
+TEST(Nominal, sub_string_last_match_partway_last) {
+    const char* source_string = "abc123c123";
+    const char* sub_string_last = "c12";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 10, sub_string_last, 3), 6);
+}
+
+TEST(OffNominal, sub_string_last_partial_match_begin) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "ab1";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), -1);
+}
+
+TEST(OffNominal, sub_string_last_partial_match_middle) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "c13";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), -1);
+}
+
+TEST(OffNominal, sub_string_last_partial_match_end) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "234";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), -1);
+}
+
+TEST(Nominal, sub_string_last_exact_match) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "abc123";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 3), 0);
+}
+
+TEST(OffNominal, sub_string_last_source_zero_size) {
+    const char* source_string = "";
+    const char* sub_string_last = "234";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 0, sub_string_last, 3), -1);
+}
+
+TEST(OffNominal, sub_string_last_substring_zero_size) {
+    const char* source_string = "abc123";
+    const char* sub_string_last = "";
+    ASSERT_EQ(Fw::StringUtils::substring_find_last(source_string, 6, sub_string_last, 0), 5);
 }
 
 int main(int argc, char** argv) {

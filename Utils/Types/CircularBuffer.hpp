@@ -114,6 +114,14 @@ class CircularBuffer : public Fw::SerialBufferBase {
     Fw::SerializeStatus rotate(FwSizeType amount);
 
     /**
+     * Remove data from the back of the circular buffer (most recently added data).
+     * This is the opposite of rotate, which removes from the front.
+     * \param amount: amount to remove from the back (in bytes)
+     * \return Fw::FW_SERIALIZE_OK on success or something else on error
+     */
+    Fw::SerializeStatus trim(FwSizeType amount);
+
+    /**
      * Get the number of bytes allocated in the buffer
      * \return number of bytes
      */

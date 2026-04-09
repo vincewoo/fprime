@@ -2,7 +2,7 @@ module Fpp {
 
   module ToCpp {
 
-    enum Phases {
+    enum Phases : U8 {
       configConstants
       configObjects
       instances
@@ -15,6 +15,7 @@ module Fpp {
       stopTasks
       freeThreads
       tearDownComponents
+      deinitComponents
     }
 
   }

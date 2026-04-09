@@ -172,8 +172,6 @@ void FpySequencer::Svc_FpySequencer_SequencerStateMachine_action_resetRuntime(
     // explicitly call dtor
     this->m_runtime.~Runtime();
     new (&this->m_runtime) Runtime();
-    Fw::ParamValid valid;
-    this->m_runtime.flags[Fpy::FlagId::EXIT_ON_CMD_FAIL] = this->paramGet_FLAG_DEFAULT_EXIT_ON_CMD_FAIL(valid);
 }
 
 //! Implementation for action validate of state machine
@@ -344,7 +342,7 @@ void FpySequencer::Svc_FpySequencer_SequencerStateMachine_action_report_seqStart
     SmId smId,                                             //!< The state machine id
     Svc_FpySequencer_SequencerStateMachine::Signal signal  //!< The signal
 ) {
-    if (this->isConnected_seqDoneOut_OutputPort(0)) {
+    if (this->isConnected_seqStartOut_OutputPort(0)) {
         // report that the sequence started to internal callers
         this->seqStartOut_out(0, this->m_sequenceFilePath);
     }

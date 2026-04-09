@@ -61,7 +61,7 @@ class QueueInterface {
     QueueInterface(const QueueInterface* other) = delete;
 
     //! \brief assignment operator is forbidden
-    virtual QueueInterface& operator=(const QueueInterface& other) = delete;
+    virtual QueueInterface& operator=(const QueueInterface& other) = delete;  // NO_CODESONAR (cpp:S3657)
 
     //! \brief create queue storage
     //!
@@ -69,11 +69,21 @@ class QueueInterface {
     //! allocation is dependent on the underlying implementation and users should assume that resource allocation is
     //! possible.
     //!
+    //! \param id: identifier for the queue, used for memory allocation
     //! \param name: name of queue
     //! \param depth: depth of queue in number of messages
     //! \param messageSize: size of an individual message
     //! \return: status of the creation
-    virtual Status create(const Fw::StringBase& name, FwSizeType depth, FwSizeType messageSize) = 0;
+    virtual Status create(FwEnumStoreType id,
+                          const Fw::ConstStringBase& name,
+                          FwSizeType depth,
+                          FwSizeType messageSize) = 0;
+
+    //! \brief teardown the queue
+    //!
+    //! Allow for queues to deallocate resources as part of system shutdown. This delegates to the underlying queue
+    //! implementation.
+    virtual void teardown() = 0;
 
     //! \brief send a message into the queue
     //!
@@ -179,7 +189,17 @@ class Queue final : public QueueInterface {
     //! \param depth: depth of queue in number of messages
     //! \param messageSize: size of an individual message
     //! \return: status of the creation
-    Status create(const Fw::StringBase& name, FwSizeType depth, FwSizeType messageSize) override;
+    Status create(FwEnumStoreType id,
+                  const Fw::ConstStringBase& name,
+                  FwSizeType depth,
+                  FwSizeType messageSize) override;
+
+    //! \brief teardown the queue
+    //!
+    //! Allow for queues to deallocate resources as part of system shutdown. This delegates to the underlying queue
+    //! implementation.
+    //! implementation.
+    void teardown() override;
 
     //! \brief send a message into the queue through delegate
     //!
@@ -248,7 +268,7 @@ class Queue final : public QueueInterface {
     //! \param priority: priority of the message
     //! \param blockType: BLOCKING to block for space or NONBLOCKING to return error when queue is full
     //! \return status of the send
-    Status send(const Fw::SerializeBufferBase& message, FwQueuePriorityType priority, BlockingType blockType);
+    Status send(const Fw::LinearBufferBase& message, FwQueuePriorityType priority, BlockingType blockType);
 
     //! \brief receive a message from a queue
     //!
@@ -261,7 +281,7 @@ class Queue final : public QueueInterface {
     //! \param priority: (output) priority of the message
     //! \param blockType: BLOCKING to block for space or NONBLOCKING to return error when queue is full
     //! \return status of the send
-    Status receive(Fw::SerializeBufferBase& destination, BlockingType blockType, FwQueuePriorityType& priority);
+    Status receive(Fw::LinearBufferBase& destination, BlockingType blockType, FwQueuePriorityType& priority);
 
     //! \brief get the queue's depth in messages
     FwSizeType getDepth() const;

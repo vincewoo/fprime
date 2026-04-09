@@ -13,6 +13,14 @@ event FileOpenError(
     severity warning high \
     format "File open error encountered while opening {}: {}"
 
+event FileWriteError(
+    writeSize: FwSizeType
+    filePath: string
+    errorCode: I32
+) \
+    severity warning high \
+    format "File write error encountered while writing {} bytes to {}: {}"
+
 event FileReadError(
     readStage: FileReadStage
     filePath: string
@@ -87,6 +95,13 @@ event SequenceCancelled(
 ) \
     severity activity high \
     format "Cancelled sequence file {}"
+
+event SequenceExitedWithError(
+    filePath: string
+    errorCode: U8
+) \
+    severity warning high \
+    format "Sequence {} exited with error code {}"
 
 event UnknownSequencerDirective(
     $opcode: U8
@@ -216,4 +231,52 @@ event BreakpointSet(
 event BreakpointCleared() \
     severity activity high \
     format "Breakpoint cleared"
-    
+
+event LogFatal(
+    filePath: string
+    message: string
+) \
+    severity fatal \
+    format "Sequence {}: {}"
+
+event LogWarningHi(
+    filePath: string
+    message: string
+) \
+    severity warning high \
+    format "Sequence {}: {}"
+
+event LogWarningLo(
+    filePath: string
+    message: string
+) \
+    severity warning low \
+    format "Sequence {}: {}"
+
+event LogCommand(
+    filePath: string
+    message: string
+) \
+    severity command \
+    format "Sequence {}: {}"
+
+event LogActivityHi(
+    filePath: string
+    message: string
+) \
+    severity activity high \
+    format "Sequence {}: {}"
+
+event LogActivityLo(
+    filePath: string
+    message: string
+) \
+    severity activity low \
+    format "Sequence {}: {}"
+
+event LogDiagnostic(
+    filePath: string
+    message: string
+) \
+    severity diagnostic \
+    format "Sequence {}: {}"

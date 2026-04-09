@@ -6,7 +6,7 @@ struct WaitRelDirective {
 
 @ sleeps until an absolute time
 struct WaitAbsDirective {
-    # pops U32, U32, U8, U16 off stack
+    # pops U32, U32, FwTimeContextStoreType, FwTimeBaseStoreType off stack
     _empty: U8
 }
 
@@ -30,12 +30,10 @@ struct NoOpDirective {
     _empty: U8
 }
 
-@ stores a tlm buffer in the lvar array
-struct StoreTlmValDirective {
+@ pushes a tlm buf to the stack
+struct PushTlmValDirective {
     @ the tlm channel id to get the time of
     chanId: FwChanIdType
-    @ the offset in the lvar array to store the tlm in
-    lvarOffset: Fpy.StackSizeType
 }
 
 @ pushes a tlm buffer to the stack, and then pushes the time 
@@ -45,12 +43,10 @@ struct PushTlmValAndTimeDirective {
     chanId: FwChanIdType
 }
 
-@ stores a prm buffer in the lvar array
-struct StorePrmDirective {
+@ pushes a prm buf to the stack
+struct PushPrmDirective {
     @ the param id to get the value of
     prmId: FwPrmIdType
-    @ the offset in the lvar array to store the prm in
-    lvarOffset: Fpy.StackSizeType
 }
 
 @ executes a cmd with const args
@@ -80,15 +76,17 @@ struct AllocateDirective {
     $size: Fpy.StackSizeType
 }
 
-@ pops some bytes off the stack and puts them in lvar array
-struct StoreDirective {
-    lvarOffset: Fpy.StackSizeType
+@ stores a value to a local variable at a compile-time-known offset relative to the current stack frame
+struct StoreRelConstOffsetDirective {
+    @ signed byte offset relative to stack_frame_start
+    lvarOffset: Fpy.SignedStackSizeType
     $size: Fpy.StackSizeType
 }
 
-@ gets bytes from lvar array and pushes them to stack
-struct LoadDirective {
-    lvarOffset: Fpy.StackSizeType
+@ loads a value from a local variable at a compile-time-known offset relative to the current stack frame
+struct LoadRelDirective {
+    @ signed byte offset relative to stack_frame_start
+    lvarOffset: Fpy.SignedStackSizeType
     $size: Fpy.StackSizeType
 }
 
@@ -124,14 +122,67 @@ struct PushTimeDirective {
     _empty: U8
 }
 
-@ pops a bool off the stack, sets a flag with a specific index to that bool
-struct SetFlagDirective {
-    flagIdx: U8
+@ grabs a specified region from a struct, pushes it to the stack, removing
+@ the rest of the struct
+struct GetFieldDirective {
+    # pops an Fpy.StackSizeType offset in the parent off the stack
+    @ total size of the struct
+    parentSize: Fpy.StackSizeType
+    @ size of the member to extract
+    memberSize: Fpy.StackSizeType
 }
 
-@ gets a flag and pushes its value as a U8 to the stack
-struct GetFlagDirective {
-    flagIdx: U8
+@ peeks at N bytes from the stack, starting from an offset relative to the top of the stack
+struct PeekDirective {
+    # pops two StackSizeType off the stack
+    _empty: U8
+}
+
+@ stores a value to a local variable at a runtime-determined offset relative to the current stack frame
+struct StoreRelDirective {
+    # pops a SignedStackSizeType lvar_offset off of stack
+    @ size of data to pop off stack
+    $size: Fpy.StackSizeType
+}
+
+@ performs a function call
+struct CallDirective {
+    # pops a U32 target directive index off stack
+    _empty: U8
+}
+
+@ returns from a function call
+struct ReturnDirective {
+    @ size of return value in bytes, 0 for void functions
+    returnValSize: Fpy.StackSizeType
+    @ total size of function arguments in bytes
+    callArgsSize: Fpy.StackSizeType
+}
+
+@ loads a value from an absolute address in the stack (for global variables)
+struct LoadAbsDirective {
+    @ absolute byte offset from the start of the stack
+    globalOffset: Fpy.StackSizeType
+    $size: Fpy.StackSizeType
+}
+
+@ stores a value to an absolute address in the stack (for global variables), offset from stack
+struct StoreAbsDirective {
+    # pops an Fpy.StackSizeType global_offset off of stack
+    $size: Fpy.StackSizeType
+}
+
+@ stores a value to an absolute address in the stack (for global variables), const offset
+struct StoreAbsConstOffsetDirective {
+    @ absolute byte offset from the start of the stack
+    globalOffset: Fpy.StackSizeType
+    $size: Fpy.StackSizeType
+}
+
+@ pops a severity and message from the stack and emits an F Prime event
+struct PopEventDirective {
+    # pops StackSizeType message_size, then message_size bytes, then U8 severity off the stack
+    _empty: U8
 }
 
 internal port directive_waitRel(directive: WaitRelDirective) priority 6 assert
@@ -144,11 +195,11 @@ internal port directive_if(directive: IfDirective) priority 6 assert
 
 internal port directive_noOp(directive: NoOpDirective) priority 6 assert
 
-internal port directive_storeTlmVal(directive: StoreTlmValDirective) priority 6 assert
+internal port directive_pushTlmVal(directive: PushTlmValDirective) priority 6 assert
 
 internal port directive_pushTlmValAndTime(directive: PushTlmValAndTimeDirective) priority 6 assert
 
-internal port directive_storePrm(directive: StorePrmDirective) priority 6 assert
+internal port directive_pushPrm(directive: PushPrmDirective) priority 6 assert
 
 internal port directive_constCmd(directive: ConstCmdDirective) priority 6 assert
 
@@ -158,9 +209,9 @@ internal port directive_exit(directive: ExitDirective) priority 6 assert
 
 internal port directive_allocate(directive: AllocateDirective) priority 6 assert
 
-internal port directive_store(directive: StoreDirective) priority 6 assert
+internal port directive_storeRelConstOffset(directive: StoreRelConstOffsetDirective) priority 6 assert
 
-internal port directive_load(directive: LoadDirective) priority 6 assert
+internal port directive_loadRel(directive: LoadRelDirective) priority 6 assert
 
 internal port directive_pushVal(directive: PushValDirective) priority 6 assert
 
@@ -172,21 +223,20 @@ internal port directive_stackCmd(directive: StackCmdDirective) priority 6 assert
 
 internal port directive_pushTime(directive: PushTimeDirective) priority 6 assert
 
-internal port directive_setFlag(directive: SetFlagDirective) priority 6 assert
+internal port directive_getField(directive: GetFieldDirective) priority 6 assert
 
-internal port directive_getFlag(directive: GetFlagDirective) priority 6 assert
+internal port directive_peek(directive: PeekDirective) priority 6 assert
 
-enum DirectiveErrorCode {
-    NO_ERROR
-    STMT_OUT_OF_BOUNDS
-    TLM_GET_NOT_CONNECTED
-    TLM_CHAN_NOT_FOUND
-    PRM_GET_NOT_CONNECTED
-    PRM_NOT_FOUND
-    CMD_SERIALIZE_FAILURE
-    DELIBERATE_FAILURE
-    STACK_ACCESS_OUT_OF_BOUNDS
-    STACK_OVERFLOW
-    DOMAIN_ERROR
-    FLAG_IDX_OUT_OF_BOUNDS
-}
+internal port directive_storeRel(directive: StoreRelDirective) priority 6 assert
+
+internal port directive_call(directive: CallDirective) priority 6 assert
+
+internal port directive_return(directive: ReturnDirective) priority 6 assert
+
+internal port directive_loadAbs(directive: LoadAbsDirective) priority 6 assert
+
+internal port directive_storeAbs(directive: StoreAbsDirective) priority 6 assert
+
+internal port directive_storeAbsConstOffset(directive: StoreAbsConstOffsetDirective) priority 6 assert
+
+internal port directive_popEvent(directive: PopEventDirective) priority 6 assert

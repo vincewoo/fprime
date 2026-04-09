@@ -79,6 +79,26 @@ class TlmPacketizerTester : public TlmPacketizerGTestBase {
     //!
     void getChannelValueTest(void);
 
+    //! Configured tlm groups test
+    //!
+    void configuredTelemetryGroupsTests(void);
+
+    //! Configure telemetry enable logic
+    //!
+    void advancedControlGroupTests(void);
+
+    //! Parameter test: SECTIONS_ENABLED
+    //!
+    void sectionEnabledParameterTest(void);
+
+    //! Parameter test: SECTIONS_CONFIG
+    //!
+    void sectionConfigParameterTest(void);
+
+    //! Helper to set the component into a stock-configuration regardless of default config
+    //!
+    void stockConfiguration();
+
   private:
     // ----------------------------------------------------------------------
     // Handlers for typed from ports
@@ -116,6 +136,10 @@ class TlmPacketizerTester : public TlmPacketizerGTestBase {
     //!
     void initComponents(void);
 
+    //! Reset Counter
+    //!
+    void resetCounter(void);
+
   private:
     // ----------------------------------------------------------------------
     // Variables
@@ -126,6 +150,9 @@ class TlmPacketizerTester : public TlmPacketizerGTestBase {
     TlmPacketizer component;
 
     Fw::Time m_testTime;  //!< store test time for packets
+
+    // bool m_primaryTestLock{true};  //! Lock limited to entries from port 0 PktSend
+    FwSizeType m_portOutInvokes[Svc::TELEMETRY_SEND_PORTS]{};
 };
 
 }  // end namespace Svc
